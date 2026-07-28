@@ -1,0 +1,74 @@
+/* =========================================================================
+   Extra components: draggable widgets, confetti canvas, misc states
+   ========================================================================= */
+
+/* Draggable dashboard widgets */
+.widget-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(280px,100%),1fr));gap:18px}
+@media (max-width:640px){.widget-grid{grid-template-columns:1fr}.widget-grid .widget{grid-column:1/-1 !important}}
+.widget{cursor:grab;transition:transform var(--t-fast),box-shadow var(--t-fast),opacity var(--t-fast)}
+.widget.dragging{opacity:.4;cursor:grabbing}
+.widget.drag-over{outline:2px dashed var(--brand-indigo);outline-offset:4px}
+.widget-drag-handle{cursor:grab;color:var(--text-muted);padding:4px}
+.widget-drag-handle:active{cursor:grabbing}
+
+/* Confetti canvas */
+#confetti-canvas{position:fixed;inset:0;pointer-events:none;z-index:300}
+
+/* Weather chip */
+.weather-chip{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:var(--r-md);background:linear-gradient(135deg,#0EA5E9,#6366F1);color:#fff;font-size:var(--fs-xs);font-weight:600}
+
+/* Countdown */
+.countdown-grid{display:flex;gap:10px}
+.countdown-box{flex:1;text-align:center;background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--r-md);padding:12px 4px}
+.countdown-box .cd-num{font-family:var(--font-mono);font-size:var(--fs-xl);font-weight:800;color:var(--brand-indigo)}
+.countdown-box .cd-label{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-top:2px}
+
+/* Rank list */
+.rank-item{display:flex;align-items:center;gap:12px;padding:10px 4px;border-bottom:1px solid var(--border)}
+.rank-item:last-child{border-bottom:none}
+.rank-num{width:26px;height:26px;border-radius:50%;background:var(--surface-alt);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:var(--text-secondary);flex-shrink:0}
+.rank-item.top1 .rank-num{background:linear-gradient(135deg,#FBBF24,#F59E0B);color:#fff}
+.rank-item.top2 .rank-num{background:linear-gradient(135deg,#CBD5E1,#94A3B8);color:#fff}
+.rank-item.top3 .rank-num{background:linear-gradient(135deg,#D97757,#B45309);color:#fff}
+.rank-name{font-size:var(--fs-sm);font-weight:600;flex:1}
+.rank-score{font-family:var(--font-mono);font-weight:700;font-size:var(--fs-sm);color:var(--brand-indigo)}
+
+/* Session timeout warning */
+.session-warning{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--surface);border:1px solid var(--status-terlambat);box-shadow:var(--shadow-lg);border-radius:var(--r-md);padding:14px 18px;display:flex;align-items:center;gap:12px;z-index:190;font-size:var(--fs-sm)}
+
+/* Announcement card */
+.announce-card{border-left:3px solid var(--brand-indigo);padding:12px 14px;border-radius:0 var(--r-md) var(--r-md) 0;background:var(--surface-alt)}
+
+/* Divider */
+.divider{height:1px;background:var(--border);border:none;margin:18px 0}
+
+/* Toggle switch */
+.switch{position:relative;display:inline-block;width:42px;height:24px;flex-shrink:0}
+.switch input{opacity:0;width:0;height:0}
+.switch-track{position:absolute;inset:0;background:var(--border-strong);border-radius:99px;transition:all var(--t-fast)}
+.switch-track::before{content:'';position:absolute;width:18px;height:18px;left:3px;top:3px;background:#fff;border-radius:50%;transition:all var(--t-fast) var(--ease);box-shadow:var(--shadow-sm)}
+.switch input:checked + .switch-track{background:var(--brand-indigo)}
+.switch input:checked + .switch-track::before{transform:translateX(18px)}
+
+/* Theme swatch picker */
+.swatch-row{display:flex;gap:10px;flex-wrap:wrap}
+.swatch{width:40px;height:40px;border-radius:50%;border:2px solid transparent;cursor:pointer;transition:all var(--t-fast);position:relative}
+.swatch.active{border-color:var(--text-primary);transform:scale(1.08)}
+.swatch.active::after{content:'✓';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;font-weight:800}
+
+/* Login page shake for error */
+.shake{animation:shake .4s}
+@keyframes shake{10%,90%{transform:translateX(-1px)}20%,80%{transform:translateX(2px)}30%,50%,70%{transform:translateX(-4px)}40%,60%{transform:translateX(4px)}}
+
+/* Upload dropzone */
+.dropzone{border:2px dashed var(--border-strong);border-radius:var(--r-md);padding:26px;text-align:center;color:var(--text-secondary);transition:all var(--t-fast);cursor:pointer}
+.dropzone:hover,.dropzone.drag{border-color:var(--brand-indigo);background:var(--status-izin-bg)}
+.dropzone svg{width:26px;height:26px;margin:0 auto 8px;color:var(--text-muted)}
+
+/* Doc list item */
+.doc-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--r-sm);margin-bottom:8px}
+.doc-item .doc-icon{width:34px;height:34px;border-radius:var(--r-sm);background:var(--status-izin-bg);color:var(--brand-indigo);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+
+/* Chart container */
+.chart-box{position:relative;height:280px}
+.chart-box.sm{height:200px}

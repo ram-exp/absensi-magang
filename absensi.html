@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Absensi — Sistem Absensi Anak Magang</title>
+<link rel="stylesheet" href="assets/css/style.css">
+<link rel="stylesheet" href="assets/css/theme.css">
+<link rel="stylesheet" href="assets/css/animations.css">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js" defer></script>
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar" id="app-sidebar"></aside>
+  <div class="main-area">
+    <header class="topbar" id="app-topbar"></header>
+    <main class="main-content" id="main-content">
+
+      <div class="flex-between mb-24" style="flex-wrap:wrap;gap:12px">
+        <div>
+          <h1 class="page-title">Absensi</h1>
+          <p class="page-subtitle">Check-in, check-out, dan riwayat kehadiran.</p>
+        </div>
+        <div class="text-mono text-secondary" id="clock" style="font-size:1.05rem"></div>
+      </div>
+
+      <!-- Peserta: Check-in/out card -->
+      <div class="grid grid-2 mb-24" id="checkinout-section"></div>
+
+      <!-- Staff: QR Scanner -->
+      <div class="card card-pad mb-24 hidden" id="staff-scan-card">
+        <div class="card-head"><h3><i data-lucide="qr-code"></i> Scan QR Peserta</h3>
+          <button class="btn btn-secondary btn-sm" id="btn-open-scanner"><i data-lucide="camera"></i> Buka Scanner</button>
+        </div>
+        <p class="text-secondary" style="font-size:.8125rem">Gunakan scanner untuk mencatat kehadiran peserta secara cepat melalui kode QR pribadi mereka.</p>
+      </div>
+
+      <!-- History -->
+      <div class="card card-pad">
+        <div class="card-head" style="flex-wrap:wrap;gap:10px">
+          <h3><i data-lucide="history"></i> Riwayat Absensi</h3>
+          <div class="flex gap-8" style="flex-wrap:wrap">
+            <button class="btn btn-secondary btn-sm" id="btn-export-csv"><i data-lucide="download"></i> CSV</button>
+            <button class="btn btn-secondary btn-sm" id="btn-print"><i data-lucide="printer"></i> Print</button>
+            <button class="btn btn-primary btn-sm hidden" id="btn-add-manual"><i data-lucide="plus"></i> Tambah Manual</button>
+          </div>
+        </div>
+
+        <div class="grid grid-4 mb-16" id="filter-row" style="gap:10px">
+          <input class="input" type="text" id="f-search" placeholder="Cari nama peserta…">
+          <select class="input" id="f-status">
+            <option value="">Semua Status</option>
+            <option value="hadir">Hadir</option>
+            <option value="terlambat">Terlambat</option>
+            <option value="izin">Izin</option>
+            <option value="sakit">Sakit</option>
+            <option value="alpha">Alpha</option>
+          </select>
+          <input class="input" type="date" id="f-from">
+          <input class="input" type="date" id="f-to">
+        </div>
+
+        <div class="table-wrap">
+          <table id="att-table">
+            <thead><tr>
+              <th data-sort="date">Tanggal</th>
+              <th class="hidden-peserta">Peserta</th>
+              <th data-sort="checkIn">Check-In</th>
+              <th data-sort="checkOut">Check-Out</th>
+              <th>Lokasi</th>
+              <th data-sort="status">Status</th>
+              <th></th>
+            </tr></thead>
+            <tbody id="att-tbody"></tbody>
+          </table>
+        </div>
+        <div id="att-empty"></div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- Scanner modal content template -->
+<template id="tpl-scanner">
+  <video id="scan-video" class="capture-video" autoplay playsinline muted></video>
+  <canvas id="scan-canvas" class="hidden"></canvas>
+  <p class="text-muted mt-8" style="font-size:.8125rem;text-align:center" id="scan-status">Arahkan kamera ke kode QR peserta…</p>
+</template>
+
+<script src="assets/js/helpers.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="assets/js/firebase-config.js"></script>
+<script src="assets/js/storage.js"></script>
+<script src="assets/js/auth.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/participants.js"></script>
+<script src="assets/js/attendance.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+  try {
+    await Storage.init();
+  } catch (e) {
+    document.body.innerHTML = '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;padding:24px;text-align:center;color:#334155"><div><h2 style="margin-bottom:8px">Gagal terhubung ke server data</h2><p style="color:#64748b;max-width:420px">Periksa koneksi internet Anda, lalu muat ulang halaman. (Detail teknis: cek console browser)</p></div></div>';
+    console.error(e);
+    return;
+  }
+  UI.initTheme();
+  const user = Auth.guard();
+  if (!user) return;
+  UI.renderShell('absensi', user);
+  UI.bindGlobalCommandPaletteShortcut(user);
+  Auth.initSessionWatcher();
+
+  const isStaff = ['admin', 'pembimbing'].includes(user.role);
+  const myParticipant = user.participantId ? Participants.getById(user.participantId) : null;
+
+  // Live clock
+  function tick(){ document.getElementById('clock').textContent = new Date().toLocaleTimeString('id-ID'); }
+  tick(); setInterval(tick, 1000);
+
+  // ================= Check-in/out (peserta) =================
+  function renderCheckInOut() {
+    const section = document.getElementById('checkinout-section');
+    if (!myParticipant) {
+      if (isStaff) { section.classList.add('hidden'); document.getElementById('staff-scan-card').classList.remove('hidden'); document.getElementById('btn-add-manual').classList.remove('hidden'); }
+      else section.innerHTML = UI.emptyState({icon:'user-x', title:'Data Peserta Tidak Ditemukan', message:'Akun Anda belum tertaut ke data peserta.'});
+      return;
+    }
+    const rec = Attendance.todayRecord(myParticipant.id);
+    section.innerHTML = `
+      <div class="card card-pad">
+        <div class="card-head"><h3><i data-lucide="log-in"></i> Check-In / Check-Out</h3></div>
+        <div class="flex-between mb-16">
+          <div>
+            <div class="text-secondary" style="font-size:.8125rem">Check-In</div>
+            <div style="font-size:1.4rem;font-weight:800" class="text-mono">${rec?.checkIn || '--:--'}</div>
+          </div>
+          <div style="text-align:right">
+            <div class="text-secondary" style="font-size:.8125rem">Check-Out</div>
+            <div style="font-size:1.4rem;font-weight:800" class="text-mono">${rec?.checkOut || '--:--'}</div>
+          </div>
+        </div>
+        ${rec?.status ? `<span class="pill pill-${rec.status} mb-16">${Helpers.statusLabel(rec.status)}</span><br>` : ''}
+        <div class="flex gap-8 mt-16">
+          <button class="btn btn-primary btn-block" id="btn-checkin" ${rec?.checkIn ? 'disabled' : ''}><i data-lucide="log-in"></i> Check-In</button>
+          <button class="btn btn-secondary btn-block" id="btn-checkout" ${!rec?.checkIn || rec?.checkOut ? 'disabled' : ''}><i data-lucide="log-out"></i> Check-Out</button>
+        </div>
+        <div class="divider"></div>
+        <button class="btn btn-ghost btn-block" id="btn-leave"><i data-lucide="calendar-x"></i> Ajukan Izin / Sakit</button>
+      </div>
+      <div class="card card-pad">
+        <div class="card-head"><h3><i data-lucide="qr-code"></i> QR Absensi Saya</h3></div>
+        <div class="qr-box" id="my-qr"></div>
+        <p class="text-muted mt-16" style="font-size:.75rem;text-align:center">Tunjukkan kode ini kepada pembimbing untuk absensi cepat via scan.</p>
+      </div>
+    `;
+    UI.initLucide();
+    if (window.QRCode) Attendance.renderQR(document.getElementById('my-qr'), myParticipant.id);
+    document.getElementById('btn-checkin').addEventListener('click', doCheckIn);
+    document.getElementById('btn-checkout').addEventListener('click', doCheckOut);
+    document.getElementById('btn-leave').addEventListener('click', openLeaveModal);
+  }
+
+  async function doCheckIn() {
+    UI.openModal({ title:'Check-In', size:'modal-sm', bodyHtml: `
+      <div class="capture-box">
+        <video id="ci-video" class="capture-video" autoplay playsinline muted></video>
+        <canvas id="ci-canvas" class="hidden"></canvas>
+        <p class="text-muted mt-8" style="font-size:.8125rem" id="ci-status">Menyiapkan kamera…</p>
+      </div>`,
+      footHtml: `<button class="btn btn-secondary" onclick="UI.closeModal()">Batal</button><button class="btn btn-primary" id="ci-capture" disabled><i data-lucide="camera"></i> Ambil Selfie &amp; Absen</button>` });
+    UI.initLucide();
+    const video = document.getElementById('ci-video');
+    const ok = await Attendance.startCamera(video);
+    document.getElementById('ci-status').textContent = ok ? 'Kamera siap. Posisikan wajah Anda.' : 'Kamera tidak tersedia — absensi tetap bisa dilanjutkan tanpa selfie.';
+    document.getElementById('ci-capture').disabled = false;
+    document.getElementById('ci-capture').addEventListener('click', async () => {
+      let selfie = null;
+      if (ok) selfie = Attendance.captureFrame(video, document.getElementById('ci-canvas'));
+      Attendance.stopCamera();
+      const location = await Attendance.getLocation();
+      const result = Attendance.checkIn(myParticipant.id, { location, selfie });
+      UI.closeModal();
+      if (result.ok) {
+        UI.toast('success', 'Check-In Berhasil', `Status: ${Helpers.statusLabel(result.record.status)} pukul ${result.record.checkIn}`);
+        renderCheckInOut(); renderTable();
+      } else UI.toast('error', 'Check-In Gagal', result.message);
+    });
+  }
+
+  async function doCheckOut() {
+    const location = await Attendance.getLocation();
+    const result = Attendance.checkOut(myParticipant.id, { location });
+    if (result.ok) { UI.toast('success', 'Check-Out Berhasil', `Tercatat pukul ${result.record.checkOut}`); renderCheckInOut(); renderTable(); }
+    else UI.toast('error', 'Check-Out Gagal', result.message);
+  }
+
+  function openLeaveModal() {
+    UI.openModal({ title: 'Ajukan Izin / Sakit', bodyHtml: `
+      <div class="field"><label>Jenis</label>
+        <select class="input" id="leave-type"><option value="izin">Izin</option><option value="sakit">Sakit</option></select>
+      </div>
+      <div class="field"><label>Tanggal</label><input class="input" type="date" id="leave-date" value="${Helpers.todayISO()}"></div>
+      <div class="field"><label>Keterangan</label><textarea class="input" id="leave-note" rows="3" placeholder="Jelaskan alasan…"></textarea></div>
+    `, footHtml: `<button class="btn btn-secondary" onclick="UI.closeModal()">Batal</button><button class="btn btn-primary" id="leave-submit">Kirim</button>` });
+    document.getElementById('leave-submit').addEventListener('click', () => {
+      const type = document.getElementById('leave-type').value;
+      const date = document.getElementById('leave-date').value;
+      const note = document.getElementById('leave-note').value;
+      Attendance.submitLeave(myParticipant.id, type, note, date);
+      UI.closeModal();
+      UI.toast('success', 'Pengajuan Terkirim', `Status ${Helpers.statusLabel(type)} tercatat untuk ${Helpers.formatDate(date)}.`);
+      renderCheckInOut(); renderTable();
+    });
+  }
+
+  // ================= Staff QR scanner =================
+  document.getElementById('btn-open-scanner')?.addEventListener('click', async () => {
+    const modal = UI.openModal({ title: 'Scan QR Peserta', bodyHtml: document.getElementById('tpl-scanner').innerHTML,
+      footHtml: `<button class="btn btn-secondary" onclick="UI.closeModal()">Tutup</button>` });
+    UI.initLucide();
+    const video = document.getElementById('scan-video');
+    const canvas = document.getElementById('scan-canvas');
+    const ok = await Attendance.startCamera(video);
+    if (!ok) { document.getElementById('scan-status').textContent = 'Kamera tidak tersedia.'; return; }
+    let scanning = true;
+    function loop() {
+      if (!scanning) return;
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+        const data = Attendance.decodeQRFromCanvas(canvas);
+        if (data) {
+          try {
+            const payload = JSON.parse(data);
+            if (payload.pid) {
+              scanning = false; Attendance.stopCamera(); UI.closeModal();
+              const p = Participants.getById(payload.pid);
+              if (!p) { UI.toast('error', 'QR Tidak Valid', 'Peserta tidak ditemukan.'); return; }
+              const result = Attendance.checkIn(payload.pid, {});
+              if (result.ok) { UI.toast('success', 'Absensi Tercatat', `${p.name} — ${Helpers.statusLabel(result.record.status)} pukul ${result.record.checkIn}`); renderTable(); }
+              else UI.toast('warning', 'Info', result.message);
+              return;
+            }
+          } catch (e) {}
+        }
+      }
+      requestAnimationFrame(loop);
+    }
+    loop();
+    const observer = new MutationObserver(() => { if (!document.body.contains(video)) { scanning = false; Attendance.stopCamera(); observer.disconnect(); } });
+    observer.observe(document.body, { childList: true, subtree: true });
+  });
+
+  // ================= History table =================
+  let sortKey = 'date', sortDir = 'desc';
+  function getRows() {
+    let rows = isStaff ? Storage.list(Storage.KEYS.attendance) : Attendance.forParticipant(myParticipant?.id);
+    const search = document.getElementById('f-search').value.toLowerCase();
+    const status = document.getElementById('f-status').value;
+    const from = document.getElementById('f-from').value;
+    const to = document.getElementById('f-to').value;
+    rows = rows.map(r => ({ ...r, participant: Participants.getById(r.participantId) }));
+    if (search) rows = rows.filter(r => r.participant?.name.toLowerCase().includes(search));
+    if (status) rows = rows.filter(r => r.status === status);
+    if (from) rows = rows.filter(r => r.date >= from);
+    if (to) rows = rows.filter(r => r.date <= to);
+    rows.sort((a, b) => {
+      const va = a[sortKey] || '', vb = b[sortKey] || '';
+      return sortDir === 'asc' ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+    });
+    return rows;
+  }
+
+  function renderTable() {
+    const rows = getRows();
+    const tbody = document.getElementById('att-tbody');
+    document.querySelectorAll('.hidden-peserta').forEach(el => el.style.display = isStaff ? '' : 'none');
+    if (!rows.length) {
+      tbody.innerHTML = '';
+      document.getElementById('att-empty').innerHTML = UI.emptyState({icon:'calendar-search', title:'Tidak Ada Data', message:'Tidak ada riwayat absensi yang sesuai dengan filter.'});
+      return;
+    }
+    document.getElementById('att-empty').innerHTML = '';
+    tbody.innerHTML = rows.map(r => `
+      <tr>
+        <td>${Helpers.formatDate(r.date)}</td>
+        <td class="hidden-peserta">${r.participant ? `<div class="td-avatar"><img src="${r.participant.photo}"><span>${Helpers.sanitize(r.participant.name)}</span></div>` : '-'}</td>
+        <td class="text-mono">${r.checkIn || '-'}</td>
+        <td class="text-mono">${r.checkOut || '-'}</td>
+        <td style="font-size:.8125rem">${r.location ? `${UI.icon('map-pin',12)} ${Helpers.sanitize(r.location.address)}` : '-'}</td>
+        <td><span class="pill pill-${r.status}">${Helpers.statusLabel(r.status)}</span></td>
+        <td><button class="icon-btn btn-detail" data-id="${r.id}">${UI.icon('eye',15)}</button></td>
+      </tr>`).join('');
+    UI.initLucide();
+    tbody.querySelectorAll('.btn-detail').forEach(b => b.addEventListener('click', () => showDetail(b.dataset.id)));
+  }
+
+  function showDetail(id) {
+    const r = Storage.find(Storage.KEYS.attendance, id);
+    const p = Participants.getById(r.participantId);
+    UI.openModal({ title: 'Detail Absensi', bodyHtml: `
+      ${r.selfie ? `<img src="${r.selfie}" style="width:100%;border-radius:12px;margin-bottom:14px">` : ''}
+      <div class="field"><label>Peserta</label><div>${Helpers.sanitize(p?.name || '-')}</div></div>
+      <div class="field"><label>Tanggal</label><div>${Helpers.formatDateLong(r.date)}</div></div>
+      <div class="field"><label>Status</label><span class="pill pill-${r.status}">${Helpers.statusLabel(r.status)}</span></div>
+      <div class="field"><label>Check-In / Out</label><div class="text-mono">${r.checkIn || '-'} — ${r.checkOut || '-'}</div></div>
+      ${r.location ? `<div class="field"><label>Lokasi</label><div style="font-size:.8125rem">${Helpers.sanitize(r.location.address)}</div></div>` : ''}
+      ${r.note ? `<div class="field"><label>Catatan</label><div>${Helpers.sanitize(r.note)}</div></div>` : ''}
+    `, footHtml: isStaff ? `<button class="btn btn-danger" id="del-att">Hapus</button><button class="btn btn-secondary" onclick="UI.closeModal()">Tutup</button>` : `<button class="btn btn-secondary" onclick="UI.closeModal()">Tutup</button>` });
+    if (isStaff) document.getElementById('del-att').addEventListener('click', () => {
+      UI.confirmDialog({ title:'Hapus data absensi?', message:'Tindakan ini tidak dapat dibatalkan.', danger:true, confirmText:'Hapus', onConfirm:() => { Attendance.remove(id); UI.closeModal(); renderTable(); UI.toast('success','Terhapus','Data absensi berhasil dihapus.'); } });
+    });
+  }
+
+  document.querySelectorAll('#att-table th[data-sort]').forEach(th => th.style.cursor = 'pointer');
+  document.querySelectorAll('#att-table th[data-sort]').forEach(th => th.addEventListener('click', () => {
+    const key = th.dataset.sort;
+    sortDir = (sortKey === key && sortDir === 'desc') ? 'asc' : 'desc';
+    sortKey = key; renderTable();
+  }));
+  ['f-search','f-status','f-from','f-to'].forEach(id => document.getElementById(id).addEventListener('input', Helpers.debounce(renderTable, 200)));
+
+  document.getElementById('btn-export-csv').addEventListener('click', () => {
+    const rows = getRows().map(r => ({ Tanggal: r.date, Peserta: r.participant?.name || '', CheckIn: r.checkIn || '', CheckOut: r.checkOut || '', Status: Helpers.statusLabel(r.status), Catatan: r.note || '' }));
+    Helpers.downloadFile(`riwayat-absensi-${Helpers.todayISO()}.csv`, Helpers.toCSV(rows), 'text/csv');
+    UI.toast('success', 'Export Berhasil', 'File CSV telah diunduh.');
+  });
+  document.getElementById('btn-print').addEventListener('click', () => {
+    const { from, to } = { from: document.getElementById('f-from').value, to: document.getElementById('f-to').value };
+    const rows = getRows();
+    Helpers.printReport({
+      title: 'Laporan Riwayat Absensi',
+      subtitle: isStaff ? 'Seluruh peserta magang' : `Peserta: ${myParticipant?.name || '-'}`,
+      meta: [
+        { label: 'Periode', value: from || to ? `${from ? Helpers.formatDate(from) : 'Awal'} — ${to ? Helpers.formatDate(to) : 'Sekarang'}` : 'Semua tanggal' },
+        { label: 'Status', value: document.getElementById('f-status').value ? Helpers.statusLabel(document.getElementById('f-status').value) : 'Semua status' },
+        { label: 'Total Data', value: `${rows.length} baris` },
+      ],
+      columns: isStaff ? ['Tanggal', 'Peserta', 'Check-In', 'Check-Out', 'Status', 'Catatan'] : ['Tanggal', 'Check-In', 'Check-Out', 'Status', 'Catatan'],
+      rows: rows.map(r => isStaff
+        ? [Helpers.formatDate(r.date), r.participant?.name || '-', r.checkIn || '-', r.checkOut || '-', Helpers.statusLabel(r.status), r.note || '-']
+        : [Helpers.formatDate(r.date), r.checkIn || '-', r.checkOut || '-', Helpers.statusLabel(r.status), r.note || '-']),
+    });
+  });
+
+  document.getElementById('btn-add-manual').addEventListener('click', () => {
+    const options = Participants.all().map(p => `<option value="${p.id}">${Helpers.sanitize(p.name)}</option>`).join('');
+    UI.openModal({ title: 'Tambah Absensi Manual', bodyHtml: `
+      <div class="field"><label>Peserta</label><select class="input" id="m-participant">${options}</select></div>
+      <div class="field"><label>Tanggal</label><input class="input" type="date" id="m-date" value="${Helpers.todayISO()}"></div>
+      <div class="field"><label>Status</label><select class="input" id="m-status">
+        <option value="hadir">Hadir</option><option value="terlambat">Terlambat</option><option value="izin">Izin</option><option value="sakit">Sakit</option><option value="alpha">Alpha</option></select></div>
+      <div class="field"><label>Check-In</label><input class="input" type="time" id="m-checkin"></div>
+      <div class="field"><label>Check-Out</label><input class="input" type="time" id="m-checkout"></div>
+      <div class="field"><label>Catatan</label><textarea class="input" id="m-note" rows="2"></textarea></div>
+    `, footHtml: `<button class="btn btn-secondary" onclick="UI.closeModal()">Batal</button><button class="btn btn-primary" id="m-save">Simpan</button>` });
+    document.getElementById('m-save').addEventListener('click', () => {
+      const pid = document.getElementById('m-participant').value;
+      const date = document.getElementById('m-date').value;
+      const status = document.getElementById('m-status').value;
+      const rec = Attendance.submitLeave(pid, status, document.getElementById('m-note').value, date);
+      Attendance.update(rec.id, { checkIn: document.getElementById('m-checkin').value || null, checkOut: document.getElementById('m-checkout').value || null });
+      UI.closeModal(); renderTable();
+      UI.toast('success', 'Tersimpan', 'Data absensi manual berhasil ditambahkan.');
+    });
+  });
+
+  renderCheckInOut();
+  renderTable();
+
+  // Live update: re-render automatically when someone checks in/out from another device.
+  Storage.onChange((key) => {
+    if ([Storage.KEYS.attendance, Storage.KEYS.participants].includes(key)) { renderCheckInOut(); renderTable(); }
+  });
+});
+</script>
+</body>
+</html>

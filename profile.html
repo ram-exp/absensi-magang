@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Profil — Sistem Absensi Anak Magang</title>
+<link rel="stylesheet" href="assets/css/style.css">
+<link rel="stylesheet" href="assets/css/theme.css">
+<link rel="stylesheet" href="assets/css/animations.css">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js" defer></script>
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar" id="app-sidebar"></aside>
+  <div class="main-area">
+    <header class="topbar" id="app-topbar"></header>
+    <main class="main-content" id="main-content">
+
+      <div class="card card-pad mb-24">
+        <div class="flex gap-16" style="align-items:center;flex-wrap:wrap">
+          <div style="position:relative">
+            <img id="profile-avatar" src="" style="width:84px;height:84px;border-radius:50%;object-fit:cover">
+            <button class="icon-btn" id="btn-change-avatar" style="position:absolute;bottom:-4px;right:-4px;width:28px;height:28px;background:var(--brand-indigo);color:#fff;border-radius:50%"><i data-lucide="camera" style="width:13px;height:13px"></i></button>
+            <input type="file" id="avatar-input" accept="image/*" class="hidden">
+          </div>
+          <div style="flex:1;min-width:200px">
+            <h1 class="page-title" id="profile-name">-</h1>
+            <p class="page-subtitle" id="profile-role">-</p>
+          </div>
+          <button class="btn btn-secondary" id="btn-edit-profile"><i data-lucide="pencil"></i> Ubah Profil</button>
+        </div>
+      </div>
+
+      <div class="tabs" id="profile-tabs">
+        <button class="tab-btn active" data-tab="overview">Ringkasan</button>
+        <button class="tab-btn" data-tab="calendar">Kalender</button>
+        <button class="tab-btn" data-tab="badges">Badge</button>
+        <button class="tab-btn" data-tab="notes">Catatan Harian</button>
+        <button class="tab-btn" data-tab="assessment">Penilaian</button>
+        <button class="tab-btn" data-tab="documents">Dokumen</button>
+        <button class="tab-btn" data-tab="history">Riwayat Login</button>
+      </div>
+
+      <div id="tab-content"></div>
+    </main>
+  </div>
+</div>
+
+<script src="assets/js/helpers.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="assets/js/firebase-config.js"></script>
+<script src="assets/js/storage.js"></script>
+<script src="assets/js/auth.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/participants.js"></script>
+<script src="assets/js/attendance.js"></script>
+<script src="assets/js/dashboard.js"></script>
+<script src="assets/js/charts.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+  try {
+    await Storage.init();
+  } catch (e) {
+    document.body.innerHTML = '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;padding:24px;text-align:center;color:#334155"><div><h2 style="margin-bottom:8px">Gagal terhubung ke server data</h2><p style="color:#64748b;max-width:420px">Periksa koneksi internet Anda, lalu muat ulang halaman. (Detail teknis: cek console browser)</p></div></div>';
+    console.error(e);
+    return;
+  }
+  UI.initTheme();
+  const user = Auth.guard();
+  if (!user) return;
+  UI.renderShell('profile', user);
+  UI.bindGlobalCommandPaletteShortcut(user);
+  Auth.initSessionWatcher();
+
+  // Viewing own profile, or (for admin/pembimbing) another participant's profile via ?id=
+  const viewedId = Helpers.queryParam('id');
+  const isStaff = ['admin', 'pembimbing'].includes(user.role);
+  const viewingOther = !!(viewedId && isStaff && viewedId !== user.participantId);
+  const p = viewingOther ? Participants.getById(viewedId) : (user.participantId ? Participants.getById(user.participantId) : null);
+  const viewedUser = viewingOther ? Auth.getUserByParticipantId(viewedId) : user;
+
+  if (viewingOther && !p) {
+    document.getElementById('main-content').innerHTML = UI.emptyState({ icon:'user-x', title:'Peserta Tidak Ditemukan', message:'Data peserta yang dicari tidak tersedia.' });
+    return;
+  }
+
+  document.getElementById('profile-avatar').src = (viewingOther ? p?.photo : user.avatar) || Helpers.avatarDataUri(viewedUser ? viewedUser.name : (p ? p.name : user.name));
+  document.getElementById('profile-name').textContent = viewingOther ? p.name : user.name;
+  document.getElementById('profile-role').textContent = viewingOther
+    ? `${Helpers.sanitize(p.division)} · peserta`
+    : `${user.title || ''} · ${Helpers.sanitize(user.role)}`;
+
+  const editBtn = document.getElementById('btn-edit-profile');
+  const avatarBtn = document.getElementById('btn-change-avatar');
+  if (viewingOther) {
+    // Staff viewing a participant: no self-profile editing here, just a shortcut back to the data form.
+    editBtn.innerHTML = `<i data-lucide="pencil"></i> Ubah Data Peserta`;
+    editBtn.addEventListener('click', () => { window.location.href = `peserta.html?id=${p.id}`; });
+    avatarBtn.style.display = 'none';
+  } else if (user.role === 'peserta') {
+    // Peserta tidak dapat mengubah data dirinya sendiri — hanya foto & password.
+    editBtn.innerHTML = `<i data-lucide="key-round"></i> Ubah Password`;
+    editBtn.addEventListener('click', openChangePasswordModal);
+    avatarBtn.addEventListener('click', () => document.getElementById('avatar-input').click());
+    document.getElementById('avatar-input').addEventListener('change', async (e) => {
+      const file = e.target.files[0]; if (!file) return;
+      const base64 = await Helpers.fileToBase64(file);
+      const users = Storage.list(Storage.KEYS.users);
+      const u = users.find(x => x.id === user.id); u.avatar = base64;
+      Storage.saveList(Storage.KEYS.users, users);
+      document.getElementById('profile-avatar').src = base64;
+      UI.toast('success', 'Foto Diperbarui', 'Foto profil berhasil diubah.');
+    });
+  } else {
+    // Admin / pembimbing: can edit their own account name & title, and change password.
+    avatarBtn.addEventListener('click', () => document.getElementById('avatar-input').click());
+    document.getElementById('avatar-input').addEventListener('change', async (e) => {
+      const file = e.target.files[0]; if (!file) return;
+      const base64 = await Helpers.fileToBase64(file);
+      const users = Storage.list(Storage.KEYS.users);
+      const u = users.find(x => x.id === user.id); u.avatar = base64;
+      Storage.saveList(Storage.KEYS.users, users);
+      document.getElementById('profile-avatar').src = base64;
+      UI.toast('success', 'Foto Diperbarui', 'Foto profil berhasil diubah.');
+    });
+    editBtn.addEventListener('click', () => {
+      UI.openModal({ title: 'Ubah Profil', bodyHtml: `
+        <div class="field"><label>Nama Lengkap</label><input class="input" id="e-name" value="${Helpers.sanitize(user.name)}"></div>
+        <div class="field"><label>Jabatan / Peran</label><input class="input" id="e-title" value="${Helpers.sanitize(user.title||'')}"></div>
+      `, footHtml: `<button class="btn btn-secondary" onclick="UI.closeModal()">Batal</button><button class="btn btn-secondary" id="e-pw">Ubah Password</button><button class="btn btn-primary" id="e-save">Simpan</button>` });
+      document.getElementById('e-save').addEventListener('click', () => {
+        const users = Storage.list(Storage.KEYS.users);
+        const u = users.find(x => x.id === user.id);
+        u.name = Helpers.cleanInput(document.getElementById('e-name').value) || u.name;
+        u.title = Helpers.cleanInput(document.getElementById('e-title').value);
+        Storage.saveList(Storage.KEYS.users, users);
+        UI.closeModal(); UI.toast('success','Tersimpan','Profil berhasil diperbarui.');
+        setTimeout(() => location.reload(), 600);
+      });
+      document.getElementById('e-pw').addEventListener('click', () => { UI.closeModal(); openChangePasswordModal(); });
+    });
+  }
+
+  function openChangePasswordModal() {
+    UI.openModal({ title: 'Ubah Password', size: 'modal-sm', bodyHtml: `
+      <div class="field"><label>Password Lama</label><input class="input" type="password" id="pw-old"></div>
+      <div class="field"><label>Password Baru</label><input class="input" type="password" id="pw-new"></div>
+      <div class="field"><label>Konfirmasi Password Baru</label><input class="input" type="password" id="pw-confirm"></div>
+      <div class="error-msg show hidden" id="pw-error"></div>
+    `, footHtml: `<button class="btn btn-secondary" onclick="UI.closeModal()">Batal</button><button class="btn btn-primary" id="pw-save">Simpan</button>` });
+    document.getElementById('pw-save').addEventListener('click', () => {
+      const oldPw = document.getElementById('pw-old').value;
+      const newPw = document.getElementById('pw-new').value;
+      const confirmPw = document.getElementById('pw-confirm').value;
+      const err = document.getElementById('pw-error');
+      const showErr = (m) => { err.textContent = m; err.classList.remove('hidden'); };
+      if (newPw !== confirmPw) { showErr('Konfirmasi password baru tidak cocok.'); return; }
+      const result = Auth.changePassword(user.id, oldPw, newPw);
+      if (!result.ok) { showErr(result.message); return; }
+      UI.closeModal(); UI.toast('success', 'Password Diperbarui', 'Password Anda berhasil diubah. Gunakan password baru saat login berikutnya.');
+    });
+  }
+
+  // ---------------- Tabs ----------------
+  const tabs = {
+    overview() {
+      if (!p) return `<div class="card card-pad">${UI.emptyState({icon:'user-x', title:'Bukan Akun Peserta', message:'Ringkasan magang hanya tersedia untuk akun peserta.'})}</div>`;
+      const s = Participants.attendanceSummary(p.id);
+      return `<div class="grid grid-2" style="gap:18px">
+        <div class="card card-pad">
+          <div class="card-head"><h3>Informasi Magang</h3></div>
+          <div class="grid grid-2" style="gap:14px 16px">
+            <div><label class="text-muted" style="font-size:11px">ID Peserta</label><div class="text-mono">${p.no}</div></div>
+            <div><label class="text-muted" style="font-size:11px">Bidang</label><div>${Helpers.sanitize(p.division)}</div></div>
+            <div><label class="text-muted" style="font-size:11px">Institusi</label><div>${Helpers.sanitize(p.institution)}</div></div>
+            <div><label class="text-muted" style="font-size:11px">Pembimbing</label><div>${Helpers.sanitize(p.supervisor)}</div></div>
+            <div><label class="text-muted" style="font-size:11px">Mulai</label><div>${Helpers.formatDate(p.startDate)}</div></div>
+            <div><label class="text-muted" style="font-size:11px">Selesai</label><div>${Helpers.formatDate(p.endDate)}</div></div>
+          </div>
+        </div>
+        <div class="card card-pad">
+          <div class="card-head"><h3>Statistik Kehadiran</h3></div>
+          <div class="grid grid-2" style="gap:12px">
+            ${['hadir','terlambat','izin','sakit','alpha'].map(k=>`<div style="text-align:center;padding:12px;border:1px solid var(--border);border-radius:10px"><div class="text-mono" style="font-weight:800;font-size:1.2rem">${s[k]}</div><div class="text-muted" style="font-size:11px;text-transform:capitalize">${k}</div></div>`).join('')}
+            <div style="text-align:center;padding:12px;border:1px solid var(--border);border-radius:10px;background:var(--status-izin-bg)"><div class="text-mono" style="font-weight:800;font-size:1.2rem;color:var(--brand-indigo)">${s.attendanceRate}%</div><div class="text-muted" style="font-size:11px">Tingkat Hadir</div></div>
+          </div>
+        </div>
+        <div class="card card-pad" style="grid-column:1/-1">
+          <div class="card-head"><h3>Wawasan Kedisiplinan</h3></div>
+          <div class="grid grid-3">
+            <div><label class="text-muted" style="font-size:11px">Jam Kedatangan Tersering</label><div style="font-weight:700" class="text-mono">${Attendance.mostCommonCheckInHour(p.id) || '-'}</div></div>
+            <div><label class="text-muted" style="font-size:11px">Hari Paling Disiplin</label><div style="font-weight:700">${Attendance.mostDisciplinedDay(p.id) || '-'}</div></div>
+            <div><label class="text-muted" style="font-size:11px">Streak Saat Ini</label><div style="font-weight:700">${Attendance.currentStreak(p.id)} hari</div></div>
+          </div>
+        </div>
+      </div>`;
+    },
+    calendar() {
+      if (!p) return `<div class="card card-pad">${UI.emptyState({icon:'calendar', title:'Tidak Tersedia', message:'Kalender hanya tersedia untuk akun peserta.'})}</div>`;
+      const days = Attendance.heatmapData(p.id, 18);
+      const colors = Charts.statusColors ? Charts.statusColors() : {};
+      return `<div class="card card-pad">
+        <div class="card-head"><h3>Heatmap Kehadiran (18 minggu terakhir)</h3></div>
+        <div class="heatmap">${days.map(d => `<div class="hcell" title="${d.date}${d.status?': '+Helpers.statusLabel(d.status):''}" style="${d.status?`background:${colors[d.status]||'#10B981'};border-color:transparent`:''}"></div>`).join('')}</div>
+        <div class="heatmap-legend">Sedikit <div class="hcell" style="background:var(--surface-alt)"></div><div class="hcell" style="background:#F59E0B"></div><div class="hcell" style="background:#10B981"></div> Banyak</div>
+      </div>`;
+    },
+    badges() {
+      if (!p) return `<div class="card card-pad">${UI.emptyState({icon:'award', title:'Tidak Tersedia', message:'Badge hanya tersedia untuk akun peserta.'})}</div>`;
+      const badges = Dashboard.badgesFor(p.id);
+      return `<div class="card card-pad"><div class="card-head"><h3>Badge &amp; Pencapaian</h3></div>
+        <div class="badge-grid">${badges.map(b=>`<div class="badge-item${b.unlocked?'':' locked'}"><div class="b-icon">${UI.icon(b.icon,22)}</div><div class="b-name">${b.name}</div></div>`).join('')}</div>
+      </div>`;
+    },
+    notes() {
+      if (!p) return `<div class="card card-pad">${UI.emptyState({icon:'notebook', title:'Tidak Tersedia', message:'Catatan harian hanya untuk akun peserta.'})}</div>`;
+      const notes = Storage.list(Storage.KEYS.notes).filter(n=>n.participantId===p.id).sort((a,b)=>b.date.localeCompare(a.date));
+      return `<div class="card card-pad">
+        <div class="card-head"><h3>Catatan Harian</h3><button class="btn btn-primary btn-sm" id="btn-add-note"><i data-lucide="plus"></i> Tambah</button></div>
+        <div id="notes-list">${notes.length ? notes.map(n=>`<div class="timeline-item"><div class="tl-time">${Helpers.formatDate(n.date)}</div><div class="tl-title">${Helpers.sanitize(n.content)}</div></div>`).join('') : UI.emptyState({icon:'notebook-pen', title:'Belum Ada Catatan', message:'Tulis catatan aktivitas harian magang Anda.'})}</div>
+      </div>`;
+    },
+    assessment() {
+      const targetId = p ? p.id : null;
+      const list = targetId ? Storage.list(Storage.KEYS.assessments).filter(a=>a.participantId===targetId) : Storage.list(Storage.KEYS.assessments);
+      const canAdd = ['admin','pembimbing'].includes(user.role) && p;
+      return `<div class="card card-pad">
+        <div class="card-head"><h3>Penilaian Pembimbing</h3>${canAdd ? `<button class="btn btn-primary btn-sm" id="btn-add-assessment"><i data-lucide="plus"></i> Tambah</button>` : ''}</div>
+        ${list.length ? list.map(a=>`<div class="card card-pad mb-16" style="background:var(--surface-alt)">
+          <div class="flex-between"><b>${Helpers.formatDate(a.date)}</b><span class="pill ${a.score>=80?'pill-hadir':a.score>=60?'pill-terlambat':'pill-alpha'}">${a.score}/100</span></div>
+          <p class="text-secondary mt-8" style="font-size:.875rem">${Helpers.sanitize(a.note)}</p>
+          <span class="text-muted" style="font-size:11px">Oleh ${Helpers.sanitize(a.supervisor)}</span>
+        </div>`).join('') : UI.emptyState({icon:'clipboard-check', title:'Belum Ada Penilaian', message:'Penilaian dari pembimbing akan tampil di sini.'})}
+      </div>`;
+    },
+    documents() {
+      const targetId = p ? p.id : null;
+      const docs = targetId ? Storage.list(Storage.KEYS.documents).filter(d=>d.participantId===targetId) : [];
+      return `<div class="card card-pad">
+        <div class="card-head"><h3>Dokumen Magang</h3></div>
+        ${p ? `<div class="dropzone" id="dropzone"><i data-lucide="upload-cloud"></i><div>Klik atau seret file ke sini untuk mengunggah</div><input type="file" id="doc-input" class="hidden"></div>` : ''}
+        <div id="doc-list" class="mt-16">${docs.length ? docs.map(d=>`<div class="doc-item"><div class="doc-icon">${UI.icon('file-text',16)}</div><div style="flex:1"><div style="font-weight:600;font-size:.875rem">${Helpers.sanitize(d.name)}</div><div class="text-muted" style="font-size:11px">${Helpers.formatDate(d.uploadedDate)}</div></div><a class="icon-btn" href="${d.base64}" download="${Helpers.sanitize(d.name)}">${UI.icon('download',15)}</a></div>`).join('') : UI.emptyState({icon:'folder-open', title:'Belum Ada Dokumen', message:'Unggah dokumen pendukung magang seperti surat pengantar atau CV.'})}</div>
+      </div>`;
+    },
+    history() {
+      const targetUserId = viewingOther ? (viewedUser ? viewedUser.id : null) : user.id;
+      const history = targetUserId ? Storage.list(Storage.KEYS.loginHistory).filter(h=>h.userId===targetUserId) : [];
+      return `<div class="card card-pad">
+        <div class="card-head"><h3>Riwayat Login</h3></div>
+        <div class="timeline">${history.length ? history.map(h=>`<div class="timeline-item"><div class="tl-time">${Helpers.formatDateTime(h.timestamp)}</div><div class="tl-title">Login sebagai ${Helpers.sanitize(h.role)}</div><div class="text-muted" style="font-size:11px">${Helpers.sanitize(h.device)}</div></div>`).join('') : ''}</div>
+        ${!history.length ? UI.emptyState({icon:'shield', title:'Belum Ada Riwayat', message:'Riwayat login akan tercatat di sini.'}) : ''}
+      </div>`;
+    },
+  };
+
+  function renderTab(name) {
+    document.getElementById('tab-content').innerHTML = tabs[name]();
+    UI.initLucide();
+    if (name === 'notes') {
+      document.getElementById('btn-add-note')?.addEventListener('click', () => {
+        UI.openModal({ title:'Tambah Catatan Harian', bodyHtml:`<div class="field"><label>Tanggal</label><input class="input" type="date" id="n-date" value="${Helpers.todayISO()}"></div><div class="field"><label>Catatan</label><textarea class="input" id="n-content" rows="4" placeholder="Ceritakan aktivitas magang hari ini…"></textarea></div>`,
+          footHtml:`<button class="btn btn-secondary" onclick="UI.closeModal()">Batal</button><button class="btn btn-primary" id="n-save">Simpan</button>` });
+        document.getElementById('n-save').addEventListener('click', () => {
+          const notes = Storage.list(Storage.KEYS.notes);
+          notes.unshift({ id: Helpers.uid('note'), participantId: p.id, date: document.getElementById('n-date').value, content: Helpers.cleanInput(document.getElementById('n-content').value) });
+          Storage.saveList(Storage.KEYS.notes, notes);
+          UI.closeModal(); renderTab('notes'); UI.toast('success','Tersimpan','Catatan harian berhasil ditambahkan.');
+        });
+      });
+    }
+    if (name === 'assessment') {
+      document.getElementById('btn-add-assessment')?.addEventListener('click', () => {
+        UI.openModal({ title:'Tambah Penilaian', bodyHtml:`
+          <div class="field"><label>Tanggal</label><input class="input" type="date" id="a-date" value="${Helpers.todayISO()}"></div>
+          <div class="field"><label>Skor (0-100)</label><input class="input" type="number" min="0" max="100" id="a-score" value="80"></div>
+          <div class="field"><label>Catatan</label><textarea class="input" id="a-note" rows="3"></textarea></div>`,
+          footHtml:`<button class="btn btn-secondary" onclick="UI.closeModal()">Batal</button><button class="btn btn-primary" id="a-save">Simpan</button>` });
+        document.getElementById('a-save').addEventListener('click', () => {
+          const list = Storage.list(Storage.KEYS.assessments);
+          list.unshift({ id: Helpers.uid('as'), participantId: p.id, supervisor: user.name, date: document.getElementById('a-date').value, score: Helpers.clamp(+document.getElementById('a-score').value,0,100), note: Helpers.cleanInput(document.getElementById('a-note').value) });
+          Storage.saveList(Storage.KEYS.assessments, list);
+          UI.closeModal(); renderTab('assessment'); UI.toast('success','Tersimpan','Penilaian berhasil ditambahkan.');
+        });
+      });
+    }
+    if (name === 'documents' && p) {
+      const dz = document.getElementById('dropzone');
+      const input = document.getElementById('doc-input');
+      dz.addEventListener('click', () => input.click());
+      ['dragover','dragleave','drop'].forEach(evt => dz.addEventListener(evt, e => { e.preventDefault(); dz.classList.toggle('drag', evt==='dragover'); }));
+      dz.addEventListener('drop', (e) => handleFile(e.dataTransfer.files[0]));
+      input.addEventListener('change', (e) => handleFile(e.target.files[0]));
+      async function handleFile(file) {
+        if (!file) return;
+        const base64 = await Helpers.fileToBase64(file);
+        const docs = Storage.list(Storage.KEYS.documents);
+        docs.unshift({ id: Helpers.uid('doc'), participantId: p.id, name: file.name, type: file.type, base64, uploadedDate: Helpers.todayISO() });
+        Storage.saveList(Storage.KEYS.documents, docs);
+        renderTab('documents');
+        UI.toast('success','Dokumen Diunggah', `${file.name} berhasil diunggah.`);
+      }
+    }
+  }
+
+  document.getElementById('profile-tabs').addEventListener('click', (e) => {
+    const btn = e.target.closest('.tab-btn'); if (!btn) return;
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active'); renderTab(btn.dataset.tab);
+  });
+
+  renderTab('overview');
+});
+</script>
+</body>
+</html>

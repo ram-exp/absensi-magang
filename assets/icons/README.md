@@ -1,0 +1,1 @@
+Ikon antarmuka menggunakan pustaka [Lucide Icons](https://lucide.dev) yang dimuat via CDN (lihat tag `<script>` di setiap halaman HTML). Folder ini disediakan sesuai struktur project untuk ikon kustom tambahan (mis. favicon alternatif) bila diperlukan di kemudian hari.

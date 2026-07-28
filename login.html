@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Masuk — Sistem Absensi Anak Magang</title>
+<link rel="stylesheet" href="assets/css/style.css">
+<link rel="stylesheet" href="assets/css/theme.css">
+<link rel="stylesheet" href="assets/css/animations.css">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js" defer></script>
+</head>
+<body>
+<div class="auth-screen">
+  <section class="auth-visual">
+    <div class="auth-brand"><div class="logo-dot"><i data-lucide="graduation-cap"></i></div> Absensi Magang</div>
+    <div class="auth-hero">
+      <h1>Kelola kehadiran peserta magang dengan mudah &amp; rapi.</h1>
+      <p>Check-in/out digital, laporan otomatis, dan pantauan progres magang — semuanya dalam satu dashboard modern.</p>
+    </div>
+    <div class="auth-quote">© 2026 Sistem Absensi Anak Magang. Berjalan 100% di browser Anda.</div>
+  </section>
+
+  <section class="auth-panel">
+    <div class="auth-card fade-in">
+      <h2>Selamat Datang 👋</h2>
+      <p class="subtitle">Masuk untuk melanjutkan ke dashboard Anda.</p>
+
+      <div class="role-switch" id="role-switch">
+        <button type="button" class="active" data-role="admin">Admin</button>
+        <button type="button" data-role="pembimbing">Pembimbing</button>
+        <button type="button" data-role="peserta">Peserta</button>
+      </div>
+
+      <form id="login-form" novalidate>
+        <div class="field">
+          <label for="username">Username</label>
+          <div class="input-icon-wrap">
+            <i data-lucide="user"></i>
+            <input class="input" type="text" id="username" placeholder="Masukkan username" autocomplete="username" required>
+          </div>
+          <div class="error-msg" id="err-username">Username wajib diisi.</div>
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <div class="input-icon-wrap" style="position:relative">
+            <i data-lucide="lock"></i>
+            <input class="input" type="password" id="password" placeholder="Masukkan password" autocomplete="current-password" required style="padding-right:38px">
+            <button type="button" class="pw-toggle" id="pw-toggle"><i data-lucide="eye"></i></button>
+          </div>
+          <div class="error-msg" id="err-password">Password wajib diisi.</div>
+        </div>
+
+        <div class="flex-between mb-16" style="font-size:.8125rem">
+          <label class="flex gap-8" style="align-items:center;cursor:pointer">
+            <input type="checkbox" id="remember"> <span class="text-secondary">Ingat saya</span>
+          </label>
+          <button type="button" id="btn-forgot-password" style="color:var(--brand-indigo);font-weight:600">Lupa password?</button>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block" id="btn-login">
+          <span id="login-btn-text">Masuk</span>
+          <span class="spinner hidden" id="login-spinner"></span>
+        </button>
+      </form>
+
+      <div class="demo-hint">
+        <b>Akun demo</b> — Admin: <span class="text-mono">admin / admin123</span><br>
+        Pembimbing: <span class="text-mono">pembimbing / bimbing123</span><br>
+        Peserta: <span class="text-mono">peserta / magang123</span>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script src="assets/js/helpers.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="assets/js/firebase-config.js"></script>
+<script src="assets/js/storage.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/auth.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+  try {
+    await Storage.init();
+  } catch (e) {
+    document.body.innerHTML = '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;padding:24px;text-align:center;color:#334155"><div><h2 style="margin-bottom:8px">Gagal terhubung ke server data</h2><p style="color:#64748b;max-width:420px">Periksa koneksi internet Anda, lalu muat ulang halaman. (Detail teknis: cek console browser)</p></div></div>';
+    console.error(e);
+    return;
+  }
+  UI.initTheme();
+  if (Auth.currentUser()) { window.location.replace('dashboard.html'); return; }
+
+  let selectedRole = 'admin';
+  document.getElementById('role-switch').addEventListener('click', (e) => {
+    const btn = e.target.closest('button'); if (!btn) return;
+    document.querySelectorAll('#role-switch button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedRole = btn.dataset.role;
+  });
+
+  document.getElementById('pw-toggle').addEventListener('click', () => {
+    const pw = document.getElementById('password');
+    const isPw = pw.type === 'password';
+    pw.type = isPw ? 'text' : 'password';
+    document.getElementById('pw-toggle').innerHTML = `<i data-lucide="${isPw ? 'eye-off' : 'eye'}"></i>`;
+    lucide.createIcons();
+  });
+
+  document.getElementById('btn-forgot-password').addEventListener('click', () => {
+    UI.openModal({ title: 'Lupa Password', size: 'modal-sm', bodyHtml: `
+      <p class="text-secondary mb-16" style="font-size:.8125rem">Masukkan username Anda. Permintaan reset password akan dikirim ke Admin untuk diproses.</p>
+      <div class="field"><label>Username</label><input class="input" id="fp-username" placeholder="Masukkan username Anda"></div>
+      <div class="error-msg show hidden" id="fp-error"></div>
+    `, footHtml: `<button class="btn btn-secondary" onclick="UI.closeModal()">Batal</button><button class="btn btn-primary" id="fp-send">Kirim Permintaan</button>` });
+    document.getElementById('fp-send').addEventListener('click', () => {
+      const username = document.getElementById('fp-username').value.trim();
+      const err = document.getElementById('fp-error');
+      if (!username) { err.textContent = 'Username wajib diisi.'; err.classList.remove('hidden'); return; }
+      const result = Auth.requestPasswordReset(username);
+      if (!result.ok) { err.textContent = result.message; err.classList.remove('hidden'); return; }
+      UI.closeModal();
+      UI.toast('success', 'Permintaan Terkirim', 'Admin akan segera memproses reset password Anda.');
+    });
+  });
+
+  const form = document.getElementById('login-form');
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const username = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value;
+    let valid = true;
+    document.getElementById('err-username').classList.toggle('show', !username);
+    document.getElementById('err-password').classList.toggle('show', !password);
+    document.getElementById('username').classList.toggle('input-error', !username);
+    document.getElementById('password').classList.toggle('input-error', !password);
+    if (!username || !password) valid = false;
+    if (!valid) { document.querySelector('.auth-card').classList.add('shake'); setTimeout(() => document.querySelector('.auth-card').classList.remove('shake'), 400); return; }
+
+    document.getElementById('login-btn-text').classList.add('hidden');
+    document.getElementById('login-spinner').classList.remove('hidden');
+    document.getElementById('btn-login').disabled = true;
+
+    setTimeout(() => {
+      const result = Auth.login(username, password, selectedRole);
+      if (result.ok) {
+        UI.toast('success', 'Login Berhasil', `Selamat datang, ${result.user.name}!`);
+        setTimeout(() => window.location.href = 'dashboard.html', 500);
+      } else {
+        document.getElementById('login-btn-text').classList.remove('hidden');
+        document.getElementById('login-spinner').classList.add('hidden');
+        document.getElementById('btn-login').disabled = false;
+        document.querySelector('.auth-card').classList.add('shake');
+        setTimeout(() => document.querySelector('.auth-card').classList.remove('shake'), 400);
+        UI.toast('error', 'Login Gagal', result.message);
+      }
+    }, 550);
+  });
+
+  lucide.createIcons();
+});
+</script>
+</body>
+</html>

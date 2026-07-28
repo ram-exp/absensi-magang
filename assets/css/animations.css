@@ -1,0 +1,26 @@
+/* Small reusable animation utilities kept separate from layout/component CSS */
+
+.spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--brand-indigo);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.pulse-dot{width:8px;height:8px;border-radius:50%;background:var(--status-hadir);position:relative}
+.pulse-dot::after{content:'';position:absolute;inset:0;border-radius:50%;background:var(--status-hadir);animation:pulse-ring 1.6s ease-out infinite}
+@keyframes pulse-ring{0%{opacity:.7;transform:scale(1)}100%{opacity:0;transform:scale(2.6)}}
+
+.stagger-in > *{animation:staggerFade .5s var(--ease) backwards}
+.stagger-in > *:nth-child(1){animation-delay:.02s}
+.stagger-in > *:nth-child(2){animation-delay:.06s}
+.stagger-in > *:nth-child(3){animation-delay:.10s}
+.stagger-in > *:nth-child(4){animation-delay:.14s}
+.stagger-in > *:nth-child(5){animation-delay:.18s}
+.stagger-in > *:nth-child(6){animation-delay:.22s}
+.stagger-in > *:nth-child(n+7){animation-delay:.26s}
+@keyframes staggerFade{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+
+.pop-in{animation:popIn .35s var(--ease)}
+@keyframes popIn{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:scale(1)}}
+
+.spin-slow{animation:spin 2.4s linear infinite}
+
+.bounce-in{animation:bounceIn .5s var(--ease)}
+@keyframes bounceIn{0%{opacity:0;transform:scale(.5)}60%{opacity:1;transform:scale(1.06)}100%{transform:scale(1)}}

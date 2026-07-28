@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pengaturan — Sistem Absensi Anak Magang</title>
+<link rel="stylesheet" href="assets/css/style.css">
+<link rel="stylesheet" href="assets/css/theme.css">
+<link rel="stylesheet" href="assets/css/animations.css">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js" defer></script>
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar" id="app-sidebar"></aside>
+  <div class="main-area">
+    <header class="topbar" id="app-topbar"></header>
+    <main class="main-content" id="main-content" style="max-width:900px">
+
+      <div class="mb-24">
+        <h1 class="page-title">Pengaturan</h1>
+        <p class="page-subtitle">Sesuaikan tampilan, keamanan, dan data aplikasi.</p>
+      </div>
+
+      <div class="card card-pad mb-24">
+        <div class="card-head"><h3><i data-lucide="palette"></i> Tampilan</h3></div>
+        <div class="field">
+          <label>Mode Tema</label>
+          <div class="flex gap-8">
+            <button class="btn btn-secondary" id="theme-light"><i data-lucide="sun"></i> Terang</button>
+            <button class="btn btn-secondary" id="theme-dark"><i data-lucide="moon"></i> Gelap</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Warna Aksen (Multi Theme)</label>
+          <div class="swatch-row" id="accent-row"></div>
+        </div>
+      </div>
+
+      <div class="card card-pad mb-24">
+        <div class="card-head"><h3><i data-lucide="bell"></i> Notifikasi</h3></div>
+        <div class="flex-between mb-16">
+          <div><div style="font-weight:600;font-size:.875rem">Suara Notifikasi</div><div class="text-muted" style="font-size:.75rem">Bunyi saat menerima toast notifikasi</div></div>
+          <label class="switch"><input type="checkbox" id="s-sound"><span class="switch-track"></span></label>
+        </div>
+        <div class="flex-between mb-16">
+          <div><div style="font-weight:600;font-size:.875rem">Pengingat Belum Absen</div><div class="text-muted" style="font-size:.75rem">Notifikasi jika belum check-in setelah jam mulai kerja</div></div>
+          <label class="switch"><input type="checkbox" id="s-reminder"><span class="switch-track"></span></label>
+        </div>
+        <div class="flex-between">
+          <div><div style="font-weight:600;font-size:.875rem">Widget Cuaca</div><div class="text-muted" style="font-size:.75rem">Tampilkan info cuaca di topbar</div></div>
+          <label class="switch"><input type="checkbox" id="s-weather"><span class="switch-track"></span></label>
+        </div>
+      </div>
+
+      <div class="card card-pad mb-24">
+        <div class="card-head"><h3><i data-lucide="key-round"></i> Ubah Password</h3></div>
+        <div class="grid grid-2" style="gap:0 16px">
+          <div class="field"><label>Password Lama</label><input class="input" type="password" id="pw-old"></div>
+          <div class="field" style="grid-column:1/-1"></div>
+          <div class="field"><label>Password Baru</label><input class="input" type="password" id="pw-new"></div>
+          <div class="field"><label>Konfirmasi Password Baru</label><input class="input" type="password" id="pw-confirm"></div>
+        </div>
+        <div class="error-msg show hidden" id="pw-error" style="margin-bottom:10px"></div>
+        <button class="btn btn-primary" id="btn-save-password"><i data-lucide="save"></i> Simpan Password</button>
+      </div>
+
+      <div class="card card-pad mb-24 hidden" id="card-divisions">
+        <div class="card-head"><h3><i data-lucide="briefcase"></i> Kelola Bidang</h3></div>
+        <p class="text-secondary mb-16" style="font-size:.8125rem">Daftar bidang yang bisa dipilih saat menambahkan peserta magang.</p>
+        <div class="flex gap-8 mb-16">
+          <input class="input" id="div-new-name" placeholder="Nama bidang baru…" style="flex:1">
+          <button class="btn btn-primary" id="btn-add-division"><i data-lucide="plus"></i> Tambah</button>
+        </div>
+        <div id="division-list" class="flex gap-8" style="flex-wrap:wrap"></div>
+      </div>
+
+      <div class="card card-pad mb-24 hidden" id="card-supervisors">
+        <div class="card-head"><h3><i data-lucide="user-cog"></i> Kelola Pembimbing</h3><button class="btn btn-primary btn-sm" id="btn-add-supervisor"><i data-lucide="plus"></i> Tambah Pembimbing</button></div>
+        <div id="supervisor-list"></div>
+      </div>
+
+      <div class="card card-pad mb-24 hidden" id="card-reset-requests">
+        <div class="card-head"><h3><i data-lucide="shield-alert"></i> Permintaan Reset Password</h3></div>
+        <p class="text-secondary mb-16" style="font-size:.8125rem">Permintaan dari peserta/pembimbing yang lupa password akan muncul di sini.</p>
+        <div id="reset-request-list"></div>
+      </div>
+
+
+      <div class="card card-pad mb-24" id="work-hours-card">
+        <div class="card-head"><h3><i data-lucide="clock-4"></i> Jam Kerja &amp; Sesi</h3></div>
+        <div class="grid grid-2">
+          <div class="field"><label>Jam Mulai Kerja</label><input class="input" type="time" id="s-workstart"></div>
+          <div class="field"><label>Toleransi Terlambat (menit)</label><input class="input" type="number" min="0" id="s-tolerance"></div>
+          <div class="field"><label>Jam Selesai Kerja</label><input class="input" type="time" id="s-workend"></div>
+          <div class="field"><label>Session Timeout (menit)</label><input class="input" type="number" min="5" id="s-timeout"></div>
+        </div>
+        <button class="btn btn-primary" id="btn-save-work"><i data-lucide="save"></i> Simpan Pengaturan</button>
+      </div>
+
+      <div class="card card-pad mb-24">
+        <div class="card-head"><h3><i data-lucide="database-backup"></i> Backup &amp; Restore Data</h3></div>
+        <p class="text-secondary mb-16" style="font-size:.8125rem">Seluruh data tersimpan di penyimpanan lokal browser Anda (LocalStorage). Ekspor secara berkala untuk mencegah kehilangan data.</p>
+        <div class="flex gap-8" style="flex-wrap:wrap">
+          <button class="btn btn-secondary" id="btn-export"><i data-lucide="download"></i> Export Backup (JSON)</button>
+          <button class="btn btn-secondary" id="btn-import"><i data-lucide="upload"></i> Import / Restore</button>
+          <input type="file" id="import-input" accept="application/json" class="hidden">
+        </div>
+      </div>
+
+      <div class="card card-pad" style="border-color:var(--status-alpha)">
+        <div class="card-head"><h3 style="color:var(--status-alpha)"><i data-lucide="alert-triangle"></i> Zona Berbahaya</h3></div>
+        <p class="text-secondary mb-16" style="font-size:.8125rem">Mengembalikan aplikasi ke kondisi awal akan menghapus seluruh data peserta, absensi, dan pengaturan secara permanen.</p>
+        <button class="btn btn-danger" id="btn-reset"><i data-lucide="trash-2"></i> Reset Aplikasi</button>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<script src="assets/js/helpers.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="assets/js/firebase-config.js"></script>
+<script src="assets/js/storage.js"></script>
+<script src="assets/js/auth.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/admin.js"></script>
+<script src="assets/js/settings.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+  try {
+    await Storage.init();
+  } catch (e) {
+    document.body.innerHTML = '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;padding:24px;text-align:center;color:#334155"><div><h2 style="margin-bottom:8px">Gagal terhubung ke server data</h2><p style="color:#64748b;max-width:420px">Periksa koneksi internet Anda, lalu muat ulang halaman. (Detail teknis: cek console browser)</p></div></div>';
+    console.error(e);
+    return;
+  }
+  UI.initTheme();
+  const user = Auth.guard();
+  if (!user) return;
+  UI.renderShell('settings', user);
+  UI.bindGlobalCommandPaletteShortcut(user);
+  Auth.initSessionWatcher();
+
+  if (user.role === 'peserta') document.getElementById('work-hours-card').classList.add('hidden');
+
+  // ---------------- Ubah Password (semua role) ----------------
+  document.getElementById('btn-save-password').addEventListener('click', () => {
+    const oldPw = document.getElementById('pw-old').value;
+    const newPw = document.getElementById('pw-new').value;
+    const confirmPw = document.getElementById('pw-confirm').value;
+    const err = document.getElementById('pw-error');
+    const showErr = (m) => { err.textContent = m; err.classList.remove('hidden'); };
+    err.classList.add('hidden');
+    if (newPw !== confirmPw) { showErr('Konfirmasi password baru tidak cocok.'); return; }
+    const result = Auth.changePassword(user.id, oldPw, newPw);
+    if (!result.ok) { showErr(result.message); return; }
+    document.getElementById('pw-old').value = ''; document.getElementById('pw-new').value = ''; document.getElementById('pw-confirm').value = '';
+    UI.toast('success', 'Password Diperbarui', 'Password Anda berhasil diubah.');
+  });
+
+  // ---------------- Panel khusus Admin ----------------
+  if (user.role === 'admin') {
+    ['card-divisions', 'card-supervisors', 'card-reset-requests'].forEach(id => document.getElementById(id).classList.remove('hidden'));
+
+    function renderDivisions() {
+      const list = AdminData.allDivisions();
+      const el = document.getElementById('division-list');
+      el.innerHTML = list.length ? list.map(d => `<span class="pill pill-neutral" style="display:inline-flex;align-items:center;gap:6px">${Helpers.sanitize(d)}<button class="btn-edit-division" data-name="${Helpers.sanitize(d)}" title="Ubah nama" style="display:inline-flex;color:var(--text-muted)">${UI.icon('pencil',12)}</button><button class="btn-del-division" data-name="${Helpers.sanitize(d)}" title="Hapus" style="display:inline-flex;color:var(--status-alpha)">${UI.icon('x',12)}</button></span>`).join('')
+        : `<span class="text-muted" style="font-size:.8125rem">Belum ada bidang. Tambahkan bidang pertama Anda.</span>`;
+      UI.initLucide();
+      el.querySelectorAll('.btn-edit-division').forEach(b => b.addEventListener('click', () => {
+        const oldName = b.dataset.name;
+        UI.openModal({ title: 'Ubah Nama Bidang', size: 'modal-sm', bodyHtml: `
+          <div class="field"><label>Nama Bidang</label><input class="input" id="rd-name" value="${Helpers.sanitize(oldName)}"></div>
+          <div class="error-msg show hidden" id="rd-error"></div>
+        `, footHtml: `<button class="btn btn-secondary" onclick="UI.closeModal()">Batal</button><button class="btn btn-primary" id="rd-save">Simpan</button>` });
+        document.getElementById('rd-save').addEventListener('click', () => {
+          const res = AdminData.renameDivision(oldName, document.getElementById('rd-name').value);
+          if (!res.ok) { const e = document.getElementById('rd-error'); e.textContent = res.message; e.classList.remove('hidden'); return; }
+          UI.closeModal(); renderDivisions(); UI.toast('success', 'Tersimpan', 'Nama bidang berhasil diperbarui.');
+        });
+      }));
+      el.querySelectorAll('.btn-del-division').forEach(b => b.addEventListener('click', () => {
+        UI.confirmDialog({ title:'Hapus bidang?', message:`Bidang "${b.dataset.name}" akan dihapus dari daftar pilihan.`, danger:true, confirmText:'Hapus', onConfirm: () => {
+          const res = AdminData.removeDivision(b.dataset.name);
+          if (!res.ok) { UI.toast('error','Tidak Bisa Dihapus', res.message); return; }
+          renderDivisions(); UI.toast('success','Terhapus','Bidang berhasil dihapus.');
+        }});
+      }));
+    }
+    document.getElementById('btn-add-division').addEventListener('click', () => {
+      const input = document.getElementById('div-new-name');
+      const res = AdminData.addDivision(input.value);
+      if (!res.ok) { UI.toast('error', 'Gagal', res.message); return; }
+      input.value = ''; renderDivisions(); UI.toast('success', 'Ditambahkan', 'Bidang baru berhasil ditambahkan.');
+    });
+    renderDivisions();
+
+    function renderSupervisors() {
+      const list = AdminData.allSupervisors();
+      const el = document.getElementById('supervisor-list');
+      el.innerHTML = list.length ? list.map(s => `<div class="flex-between" style="padding:10px 0;border-bottom:1px solid var(--border)">
+        <div class="flex gap-12" style="align-items:center">
+          <img src="${s.avatar || Helpers.avatarDataUri(s.name)}" style="width:36px;height:36px;border-radius:50%;object-fit:cover">
+          <div><div style="font-weight:600;font-size:.875rem">${Helpers.sanitize(s.name)}</div><div class="text-muted" style="font-size:11px">${Helpers.sanitize(s.title||'')} · <span class="text-mono">${Helpers.sanitize(s.username)}</span></div></div>
+        </div>
+        <div class="flex gap-8">
+          <button class="icon-btn btn-edit-supervisor" data-id="${s.id}" title="Ubah">${UI.icon('pencil',15)}</button>
+          <button class="icon-btn btn-del-supervisor" data-id="${s.id}" title="Hapus">${UI.icon('trash-2',15)}</button>
+        </div>
+      </div>`).join('') : `<span class="text-muted" style="font-size:.8125rem">Belum ada akun pembimbing.</span>`;
+      UI.initLucide();
+      el.querySelectorAll('.btn-edit-supervisor').forEach(b => b.addEventListener('click', () => openSupervisorModal(b.dataset.id)));
+      el.querySelectorAll('.btn-del-supervisor').forEach(b => b.addEventListener('click', () => {
+        UI.confirmDialog({ title:'Hapus pembimbing?', message:'Akun pembimbing ini akan dihapus. Peserta yang ditugaskan padanya akan menjadi belum memiliki pembimbing.', danger:true, confirmText:'Hapus', onConfirm: () => {
+          AdminData.removeSupervisor(b.dataset.id); renderSupervisors(); UI.toast('success','Terhapus','Akun pembimbing berhasil dihapus.');
+        }});
+      }));
+    }
+    function openSupervisorModal(id) {
+      const s = id ? AdminData.allSupervisors().find(x=>x.id===id) : null;
+      UI.openModal({ title: s ? 'Ubah Pembimbing' : 'Tambah Pembimbing', bodyHtml: `
+        <div class="field"><label>Nama Lengkap <span class="req">*</span></label><input class="input" id="sv-name" value="${s?Helpers.sanitize(s.name):''}"></div>
+        <div class="field"><label>Jabatan</label><input class="input" id="sv-title" value="${s?Helpers.sanitize(s.title||''):'Pembimbing Lapangan'}"></div>
+        <div class="field"><label>Username <span class="req">*</span></label><input class="input" id="sv-username" value="${s?Helpers.sanitize(s.username):''}"></div>
+        <div class="field"><label>${s?'Password Baru (kosongkan jika tidak diubah)':'Password'} ${s?'':'<span class=\"req\">*</span>'}</label><input class="input" type="text" id="sv-password" placeholder="${s?'••••••':'Minimal 4 karakter'}"></div>
+        <div class="error-msg show hidden" id="sv-error"></div>
+      `, footHtml: `<button class="btn btn-secondary" onclick="UI.closeModal()">Batal</button><button class="btn btn-primary" id="sv-save">Simpan</button>` });
+      document.getElementById('sv-save').addEventListener('click', () => {
+        const err = document.getElementById('sv-error'); const showErr = (m) => { err.textContent = m; err.classList.remove('hidden'); };
+        const name = document.getElementById('sv-name').value.trim();
+        const title = document.getElementById('sv-title').value.trim();
+        const username = document.getElementById('sv-username').value.trim();
+        const password = document.getElementById('sv-password').value;
+        if (!name || !username) { showErr('Nama dan username wajib diisi.'); return; }
+        if (!s && !password) { showErr('Password wajib diisi untuk akun baru.'); return; }
+        if (password && password.length < 4) { showErr('Password minimal 4 karakter.'); return; }
+        const res = s ? AdminData.updateSupervisor(s.id, { name, title, username, password }) : AdminData.addSupervisor({ name, title, username, password });
+        if (!res.ok) { showErr(res.message); return; }
+        UI.closeModal(); renderSupervisors(); UI.toast('success', 'Tersimpan', `Pembimbing berhasil ${s?'diperbarui':'ditambahkan'}.`);
+      });
+    }
+    document.getElementById('btn-add-supervisor').addEventListener('click', () => openSupervisorModal(null));
+    renderSupervisors();
+
+    function renderResetRequests() {
+      const pending = Auth.pendingPasswordRequests();
+      const el = document.getElementById('reset-request-list');
+      el.innerHTML = pending.length ? pending.map(r => `<div class="flex-between" style="padding:10px 0;border-bottom:1px solid var(--border)">
+        <div><div style="font-weight:600;font-size:.875rem">${Helpers.sanitize(r.name)} <span class="text-muted text-mono" style="font-size:11px">(${Helpers.sanitize(r.username)})</span></div><div class="text-muted" style="font-size:11px">${Helpers.sanitize(r.role)} · ${Helpers.formatTimeAgo(r.timestamp)}</div></div>
+        <div class="flex gap-8">
+          <button class="btn btn-secondary btn-sm btn-dismiss-req" data-id="${r.id}">Abaikan</button>
+          <button class="btn btn-primary btn-sm btn-resolve-req" data-id="${r.id}">Set Password Baru</button>
+        </div>
+      </div>`).join('') : `<span class="text-muted" style="font-size:.8125rem">Tidak ada permintaan reset password yang menunggu.</span>`;
+      el.querySelectorAll('.btn-dismiss-req').forEach(b => b.addEventListener('click', () => { Auth.dismissPasswordRequest(b.dataset.id); renderResetRequests(); }));
+      el.querySelectorAll('.btn-resolve-req').forEach(b => b.addEventListener('click', () => {
+        UI.openModal({ title:'Set Password Baru', size:'modal-sm', bodyHtml:`
+          <div class="field"><label>Password Baru</label><input class="input" type="text" id="rq-password" placeholder="Minimal 4 karakter"></div>
+          <div class="error-msg show hidden" id="rq-error"></div>
+        `, footHtml:`<button class="btn btn-secondary" onclick="UI.closeModal()">Batal</button><button class="btn btn-primary" id="rq-save">Simpan</button>` });
+        document.getElementById('rq-save').addEventListener('click', () => {
+          const res = Auth.resolvePasswordReset(b.dataset.id, document.getElementById('rq-password').value);
+          if (!res.ok) { const e = document.getElementById('rq-error'); e.textContent = res.message; e.classList.remove('hidden'); return; }
+          UI.closeModal(); renderResetRequests(); UI.toast('success','Berhasil','Password pengguna berhasil direset.');
+        });
+      }));
+    }
+    renderResetRequests();
+    Storage.onChange((key) => { if (key === Storage.KEYS.passwordResetRequests) renderResetRequests(); });
+  }
+
+  const s = Storage.getSettings();
+  function syncThemeButtons() {
+    const cur = Storage.getSettings().theme;
+    document.getElementById('theme-light').classList.toggle('btn-primary', cur==='light');
+    document.getElementById('theme-light').classList.toggle('btn-secondary', cur!=='light');
+    document.getElementById('theme-dark').classList.toggle('btn-primary', cur==='dark');
+    document.getElementById('theme-dark').classList.toggle('btn-secondary', cur!=='dark');
+  }
+  document.getElementById('theme-light').addEventListener('click', () => { Storage.saveSettings({theme:'light'}); UI.applyTheme('light'); syncThemeButtons(); });
+  document.getElementById('theme-dark').addEventListener('click', () => { Storage.saveSettings({theme:'dark'}); UI.applyTheme('dark'); syncThemeButtons(); });
+  syncThemeButtons();
+
+  function renderAccents() {
+    const cur = Storage.getSettings().accentTheme || 'indigo';
+    const row = document.getElementById('accent-row');
+    row.innerHTML = Object.entries(UI.ACCENTS).map(([name, pair]) =>
+      `<div class="swatch${name===cur?' active':''}" data-accent="${name}" style="background:linear-gradient(135deg,${pair[0]},${pair[1]})" title="${name}"></div>`
+    ).join('');
+    row.querySelectorAll('.swatch').forEach(sw => sw.addEventListener('click', () => {
+      Storage.saveSettings({ accentTheme: sw.dataset.accent });
+      UI.applyAccent(sw.dataset.accent);
+      renderAccents();
+      UI.toast('success','Aksen Diubah', 'Warna aksen aplikasi diperbarui.', 1800);
+    }));
+  }
+  renderAccents();
+
+  document.getElementById('s-sound').checked = s.soundEnabled;
+  document.getElementById('s-reminder').checked = s.reminderEnabled;
+  document.getElementById('s-weather').checked = s.weatherWidget;
+  ['s-sound','s-reminder','s-weather'].forEach(id => document.getElementById(id).addEventListener('change', (e) => {
+    const map = { 's-sound':'soundEnabled', 's-reminder':'reminderEnabled', 's-weather':'weatherWidget' };
+    Storage.saveSettings({ [map[id]]: e.target.checked });
+    UI.toast('success', 'Pengaturan Disimpan', '', 1500);
+  }));
+
+  document.getElementById('s-workstart').value = s.workStart;
+  document.getElementById('s-workend').value = s.workEnd;
+  document.getElementById('s-tolerance').value = s.lateToleranceMinutes;
+  document.getElementById('s-timeout').value = s.sessionTimeoutMinutes;
+  document.getElementById('btn-save-work')?.addEventListener('click', () => {
+    Storage.saveSettings({
+      workStart: document.getElementById('s-workstart').value,
+      workEnd: document.getElementById('s-workend').value,
+      lateToleranceMinutes: +document.getElementById('s-tolerance').value,
+      sessionTimeoutMinutes: +document.getElementById('s-timeout').value,
+    });
+    UI.toast('success', 'Tersimpan', 'Pengaturan jam kerja & sesi diperbarui.');
+  });
+
+  document.getElementById('btn-export').addEventListener('click', () => {
+    const filename = Settings.exportBackup();
+    UI.toast('success', 'Backup Berhasil', `Data diekspor sebagai ${filename}`);
+  });
+  document.getElementById('btn-import').addEventListener('click', () => document.getElementById('import-input').click());
+  document.getElementById('import-input').addEventListener('change', (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    UI.confirmDialog({ title:'Restore data?', message:'Data saat ini akan ditimpa dengan isi file backup. Lanjutkan?', confirmText:'Restore', danger:true, onConfirm: () => {
+      Settings.restoreBackup(file).then(() => { UI.toast('success','Restore Berhasil','Data berhasil dipulihkan. Memuat ulang…'); setTimeout(()=>location.reload(), 1000); })
+        .catch(() => UI.toast('error','Restore Gagal','File backup tidak valid.'));
+    }});
+  });
+
+  document.getElementById('btn-reset').addEventListener('click', () => {
+    UI.confirmDialog({ title:'Reset seluruh aplikasi?', message:'Semua data akan dihapus permanen dan tidak dapat dikembalikan.', confirmText:'Ya, Reset', danger:true, onConfirm: () => {
+      Settings.factoryReset();
+      UI.toast('success','Berhasil Direset','Aplikasi akan dimuat ulang…');
+      setTimeout(() => { window.location.href = 'login.html'; }, 1000);
+    }});
+  });
+});
+</script>
+</body>
+</html>

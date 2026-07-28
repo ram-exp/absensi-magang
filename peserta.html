@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Peserta Magang — Sistem Absensi Anak Magang</title>
+<link rel="stylesheet" href="assets/css/style.css">
+<link rel="stylesheet" href="assets/css/theme.css">
+<link rel="stylesheet" href="assets/css/animations.css">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js" defer></script>
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar" id="app-sidebar"></aside>
+  <div class="main-area">
+    <header class="topbar" id="app-topbar"></header>
+    <main class="main-content" id="main-content">
+
+      <div class="flex-between mb-24" style="flex-wrap:wrap;gap:12px">
+        <div>
+          <h1 class="page-title">Peserta Magang</h1>
+          <p class="page-subtitle">Kelola data peserta magang: tambah, ubah, dan hapus.</p>
+        </div>
+        <div class="flex gap-8">
+          <button class="btn btn-secondary" id="btn-print-participants"><i data-lucide="printer"></i> Cetak</button>
+          <button class="btn btn-primary" id="btn-add-participant"><i data-lucide="user-plus"></i> Tambah Peserta</button>
+        </div>
+      </div>
+
+      <div class="card card-pad mb-24">
+        <div class="grid grid-4" style="gap:10px">
+          <input class="input" type="text" id="f-search" placeholder="Cari nama, email, bidang…">
+          <select class="input" id="f-division"><option value="">Semua Bidang</option></select>
+          <select class="input" id="f-status"><option value="">Semua Status</option><option value="active">Aktif</option><option value="completed">Selesai</option></select>
+          <select class="input" id="f-sort">
+            <option value="name-asc">Nama A-Z</option><option value="name-desc">Nama Z-A</option>
+            <option value="progress-desc">Progres Tertinggi</option><option value="startDate-desc">Terbaru</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Peserta</th><th>ID</th><th>Bidang</th><th>Institusi</th><th>Progres</th><th>Status</th><th></th></tr></thead>
+          <tbody id="p-tbody"></tbody>
+        </table>
+      </div>
+      <div id="p-empty"></div>
+    </main>
+  </div>
+</div>
+
+<script src="assets/js/helpers.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="assets/js/firebase-config.js"></script>
+<script src="assets/js/storage.js"></script>
+<script src="assets/js/auth.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/admin.js"></script>
+<script src="assets/js/participants.js"></script>
+<script src="assets/js/attendance.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+  try {
+    await Storage.init();
+  } catch (e) {
+    document.body.innerHTML = '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;padding:24px;text-align:center;color:#334155"><div><h2 style="margin-bottom:8px">Gagal terhubung ke server data</h2><p style="color:#64748b;max-width:420px">Periksa koneksi internet Anda, lalu muat ulang halaman. (Detail teknis: cek console browser)</p></div></div>';
+    console.error(e);
+    return;
+  }
+  UI.initTheme();
+  const user = Auth.guard(['admin','pembimbing']);
+  if (!user) return;
+  UI.renderShell('peserta', user);
+  UI.bindGlobalCommandPaletteShortcut(user);
+  Auth.initSessionWatcher();
+
+  function populateDivisionFilter() {
+    const inUse = new Set(Participants.all().map(p => p.division));
+    const divisions = [...new Set([...AdminData.allDivisions(), ...inUse])];
+    document.getElementById('f-division').innerHTML = `<option value="">Semua Bidang</option>` + divisions.map(d => `<option>${Helpers.sanitize(d)}</option>`).join('');
+  }
+
+  function getRows() {
+    let rows = Participants.all();
+    const search = document.getElementById('f-search').value;
+    const division = document.getElementById('f-division').value;
+    const status = document.getElementById('f-status').value;
+    const sort = document.getElementById('f-sort').value;
+    rows = Participants.search(search, rows);
+    if (division) rows = rows.filter(p => p.division === division);
+    if (status) rows = rows.filter(p => p.status === status);
+    const [key, dir] = sort.split('-');
+    rows.sort((a, b) => {
+      let va, vb;
+      if (key === 'progress') { va = Participants.progress(a); vb = Participants.progress(b); }
+      else { va = a[key]; vb = b[key]; }
+      const cmp = typeof va === 'number' ? va - vb : String(va).localeCompare(String(vb));
+      return dir === 'asc' ? cmp : -cmp;
+    });
+    return rows;
+  }
+
+  function render() {
+    const rows = getRows();
+    const tbody = document.getElementById('p-tbody');
+    if (!rows.length) {
+      tbody.innerHTML = '';
+      document.getElementById('p-empty').innerHTML = UI.emptyState({ icon:'users', title:'Belum Ada Peserta', message:'Tambahkan peserta magang pertama Anda untuk mulai mencatat kehadiran.', actionLabel:'Tambah Peserta', onAction: openAddModal });
+      return;
+    }
+    document.getElementById('p-empty').innerHTML = '';
+    tbody.innerHTML = rows.map(p => {
+      const progress = Participants.progress(p);
+      return `<tr>
+        <td><div class="td-avatar"><img src="${p.photo}"><div><div style="font-weight:600">${Helpers.sanitize(p.name)}</div><div class="text-muted" style="font-size:11px">${Helpers.sanitize(p.email)}</div></div></div></td>
+        <td class="text-mono" style="font-size:12px">${p.no}</td>
+        <td>${Helpers.sanitize(p.division)}</td>
+        <td>${Helpers.sanitize(p.institution)}</td>
+        <td style="min-width:120px"><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:6px;background:var(--border);border-radius:99px;overflow:hidden"><div style="width:${progress}%;height:100%;background:var(--brand-gradient)"></div></div><span class="text-mono" style="font-size:11px">${progress}%</span></div></td>
+        <td><span class="pill ${p.status==='active'?'pill-hadir':'pill-neutral'}">${p.status==='active'?'Aktif':'Selesai'}</span></td>
+        <td>
+          <button class="icon-btn btn-view" data-id="${p.id}" title="Detail">${UI.icon('eye',15)}</button>
+          <button class="icon-btn btn-edit" data-id="${p.id}" title="Ubah">${UI.icon('pencil',15)}</button>
+          <button class="icon-btn btn-del" data-id="${p.id}" title="Hapus">${UI.icon('trash-2',15)}</button>
+        </td>
+      </tr>`;
+    }).join('');
+    UI.initLucide();
+    tbody.querySelectorAll('.btn-view').forEach(b => b.addEventListener('click', () => openDetail(b.dataset.id)));
+    tbody.querySelectorAll('.btn-edit').forEach(b => b.addEventListener('click', () => openFormModal(b.dataset.id)));
+    tbody.querySelectorAll('.btn-del').forEach(b => b.addEventListener('click', () => {
+      const p = Participants.getById(b.dataset.id);
+      UI.confirmDialog({ title:'Hapus peserta?', message:`Data ${p.name} beserta riwayat absensinya akan dihapus permanen.`, danger:true, confirmText:'Hapus', onConfirm: () => { Participants.remove(p.id); render(); populateDivisionFilter(); UI.toast('success','Terhapus',`${p.name} berhasil dihapus.`); } });
+    }));
+  }
+
+  function openDetail(id) {
+    const p = Participants.getById(id);
+    const s = Participants.attendanceSummary(id);
+    UI.openModal({ title: p.name, size: 'modal-lg', bodyHtml: `
+      <div class="flex gap-16 mb-24" style="align-items:center">
+        <img src="${p.photo}" style="width:64px;height:64px;border-radius:50%;object-fit:cover">
+        <div>
+          <div style="font-weight:700;font-size:1.05rem">${Helpers.sanitize(p.name)}</div>
+          <div class="text-secondary" style="font-size:.8125rem">${Helpers.sanitize(p.division)} · ${Helpers.sanitize(p.institution)}</div>
+          <div class="text-mono text-muted" style="font-size:11px">${p.no}</div>
+        </div>
+      </div>
+      <div class="grid grid-4 mb-24">
+        ${['hadir','terlambat','izin','sakit'].map(k => `<div class="card card-pad" style="text-align:center;padding:14px"><div style="font-weight:800;font-size:1.3rem" class="text-mono">${s[k]}</div><div class="text-muted" style="font-size:11px;text-transform:capitalize">${k}</div></div>`).join('')}
+      </div>
+      <div class="grid grid-2" style="gap:14px">
+        <div><label class="text-muted" style="font-size:11px">Email</label><div>${Helpers.sanitize(p.email)}</div></div>
+        <div><label class="text-muted" style="font-size:11px">Telepon</label><div>${Helpers.sanitize(p.phone)}</div></div>
+        <div><label class="text-muted" style="font-size:11px">Mulai</label><div>${Helpers.formatDate(p.startDate)}</div></div>
+        <div><label class="text-muted" style="font-size:11px">Selesai</label><div>${Helpers.formatDate(p.endDate)}</div></div>
+        <div><label class="text-muted" style="font-size:11px">Pembimbing</label><div>${Helpers.sanitize(p.supervisor)}</div></div>
+        <div><label class="text-muted" style="font-size:11px">Alamat</label><div>${Helpers.sanitize(p.address)}</div></div>
+      </div>
+    `, footHtml: `<button class="btn btn-secondary" onclick="UI.closeModal()">Tutup</button><button class="btn btn-secondary" id="detail-profile">Lihat Profil Lengkap</button><button class="btn btn-primary" id="detail-edit">Ubah Data</button>` });
+    document.getElementById('detail-edit').addEventListener('click', () => { UI.closeModal(); openFormModal(id); });
+    document.getElementById('detail-profile').addEventListener('click', () => { window.location.href = `profile.html?id=${id}`; });
+  }
+
+  function openAddModal() { openFormModal(null); }
+
+  function openFormModal(id) {
+    const p = id ? Participants.getById(id) : null;
+    const linkedUser = p ? Auth.getUserByParticipantId(p.id) : null;
+    const divisions = AdminData.allDivisions();
+    const supervisors = AdminData.allSupervisors();
+    const divisionOptions = `<option value="">— Pilih Bidang —</option>` + divisions.map(d => `<option ${p?.division===d?'selected':''}>${Helpers.sanitize(d)}</option>`).join('')
+      + (p && p.division && !divisions.includes(p.division) ? `<option selected>${Helpers.sanitize(p.division)}</option>` : '');
+    const supervisorOptions = `<option value="">— Pilih Pembimbing —</option>` + supervisors.map(s => `<option value="${s.id}" ${p?.supervisorId===s.id?'selected':''}>${Helpers.sanitize(s.name)}</option>`).join('');
+
+    UI.openModal({ title: p ? 'Ubah Peserta' : 'Tambah Peserta Baru', size: 'modal-lg', bodyHtml: `
+      <div class="grid grid-2" style="gap:0 16px">
+        <div class="field"><label>Nama Lengkap <span class="req">*</span></label><input class="input" id="pm-name" value="${p ? Helpers.sanitize(p.name) : ''}"></div>
+        <div class="field"><label>Email <span class="req">*</span></label><input class="input" type="email" id="pm-email" value="${p ? Helpers.sanitize(p.email) : ''}"></div>
+        <div class="field"><label>Telepon</label><input class="input" id="pm-phone" value="${p ? Helpers.sanitize(p.phone) : ''}"></div>
+        <div class="field"><label>Jenis Kelamin</label><select class="input" id="pm-gender"><option value="L" ${p?.gender==='L'?'selected':''}>Laki-laki</option><option value="P" ${p?.gender==='P'?'selected':''}>Perempuan</option></select></div>
+        <div class="field"><label>Institusi <span class="req">*</span></label><input class="input" id="pm-institution" value="${p ? Helpers.sanitize(p.institution) : ''}"></div>
+        <div class="field"><label>Bidang <span class="req">*</span></label><select class="input" id="pm-division">${divisionOptions}</select></div>
+        <div class="field"><label>Pembimbing</label><select class="input" id="pm-supervisor">${supervisorOptions}</select></div>
+        <div class="field"><label>Status</label><select class="input" id="pm-status-val"><option value="active" ${p?.status==='active'?'selected':''}>Aktif</option><option value="completed" ${p?.status==='completed'?'selected':''}>Selesai</option></select></div>
+        <div class="field"><label>Tanggal Mulai <span class="req">*</span></label><input class="input" type="date" id="pm-start" value="${p ? p.startDate : Helpers.todayISO()}"></div>
+        <div class="field"><label>Tanggal Selesai <span class="req">*</span></label><input class="input" type="date" id="pm-end" value="${p ? p.endDate : Helpers.addDays(Helpers.todayISO(),90)}"></div>
+      </div>
+      <div class="field"><label>Alamat</label><textarea class="input" id="pm-address" rows="2">${p ? Helpers.sanitize(p.address) : ''}</textarea></div>
+
+      <div class="card-head" style="margin-top:6px"><h3 style="font-size:.875rem">Kredensial Login Peserta</h3></div>
+      ${p ? `
+        <div class="grid grid-2" style="gap:0 16px">
+          <div class="field"><label>Username</label><input class="input" id="pm-username" value="${linkedUser ? Helpers.sanitize(linkedUser.username) : ''}" ${linkedUser ? '' : 'placeholder="Belum ada akun — isi untuk membuat akun login"'}></div>
+          <div class="field"><label>Password Baru <span class="text-muted" style="font-weight:400">(kosongkan jika tidak diubah)</span></label><input class="input" type="text" id="pm-password" placeholder="••••••"></div>
+        </div>
+        <p class="text-muted" style="font-size:11px;margin-top:-8px">${linkedUser ? `Akun login aktif untuk peserta ini (dibuat otomatis saat peserta ditambahkan).` : `Peserta ini belum memiliki akun login. Isi username &amp; password untuk membuatkan satu.`}</p>
+      ` : `
+        <div class="grid grid-2" style="gap:0 16px">
+          <div class="field"><label>Username <span class="req">*</span></label><input class="input" id="pm-username" placeholder="cth. ahmad.fauzan"></div>
+          <div class="field"><label>Password <span class="req">*</span></label><input class="input" type="text" id="pm-password" placeholder="Minimal 4 karakter"></div>
+        </div>
+        <p class="text-muted" style="font-size:11px;margin-top:-8px">Username &amp; password ini akan digunakan peserta untuk login (role Peserta).</p>
+      `}
+      <div class="error-msg show hidden" id="form-error" style="margin-top:10px"></div>
+    `, footHtml: `<button class="btn btn-secondary" onclick="UI.closeModal()">Batal</button><button class="btn btn-primary" id="pm-save">Simpan</button>` });
+
+    document.getElementById('pm-save').addEventListener('click', () => {
+      const supervisorSel = document.getElementById('pm-supervisor');
+      const supervisorId = supervisorSel.value || null;
+      const supervisorName = supervisorId ? supervisorSel.options[supervisorSel.selectedIndex].textContent : '';
+      const username = document.getElementById('pm-username').value.trim();
+      const password = document.getElementById('pm-password').value;
+
+      const data = {
+        name: document.getElementById('pm-name').value.trim(),
+        email: document.getElementById('pm-email').value.trim(),
+        phone: document.getElementById('pm-phone').value.trim(),
+        gender: document.getElementById('pm-gender').value,
+        institution: document.getElementById('pm-institution').value.trim(),
+        division: document.getElementById('pm-division').value.trim(),
+        supervisorId, supervisorName,
+        status: document.getElementById('pm-status-val').value,
+        startDate: document.getElementById('pm-start').value,
+        endDate: document.getElementById('pm-end').value,
+        address: document.getElementById('pm-address').value.trim(),
+      };
+      const err = document.getElementById('form-error');
+      const showErr = (msg) => { err.textContent = msg; err.classList.remove('hidden'); };
+
+      if (!data.name || !data.email || !data.institution || !data.division || !data.startDate || !data.endDate) {
+        showErr('Mohon lengkapi semua kolom wajib (bertanda *).'); return;
+      }
+      if (!p && (!username || !password)) { showErr('Username dan password login peserta wajib diisi.'); return; }
+      if (password && password.length < 4) { showErr('Password minimal 4 karakter.'); return; }
+      if (username && Auth.usernameTaken(username, linkedUser ? linkedUser.id : null)) { showErr('Username sudah digunakan oleh akun lain.'); return; }
+
+      data.supervisor = supervisorName;
+      let saved;
+      if (p) {
+        saved = Participants.update(p.id, data);
+        if (username || password) {
+          if (linkedUser) Auth.syncParticipantUser(p.id, { username, password, name: data.name, title: data.division });
+          else if (username && password) Auth.createParticipantUser(saved, username, password);
+        }
+      } else {
+        saved = Participants.create(data);
+        Auth.createParticipantUser(saved, username, password);
+      }
+      UI.closeModal(); render(); populateDivisionFilter();
+      UI.toast('success', p ? 'Perubahan Disimpan' : 'Peserta Ditambahkan', `${data.name} berhasil ${p ? 'diperbarui' : 'ditambahkan'}.`);
+    });
+  }
+
+  document.getElementById('btn-add-participant').addEventListener('click', openAddModal);
+  document.getElementById('btn-print-participants').addEventListener('click', () => {
+    const rows = getRows();
+    Helpers.printReport({
+      title: 'Daftar Peserta Magang',
+      subtitle: `Dicetak oleh ${user.name} (${user.role})`,
+      meta: [{ label: 'Total Peserta', value: `${rows.length} peserta` }],
+      columns: ['Nama', 'ID Peserta', 'Bidang', 'Institusi', 'Mulai', 'Selesai', 'Progres', 'Status'],
+      rows: rows.map(p => [p.name, p.no, p.division, p.institution, Helpers.formatDate(p.startDate), Helpers.formatDate(p.endDate), `${Participants.progress(p)}%`, p.status === 'active' ? 'Aktif' : 'Selesai']),
+    });
+  });
+  ['f-search','f-division','f-status','f-sort'].forEach(id => document.getElementById(id).addEventListener('input', Helpers.debounce(render, 150)));
+
+  populateDivisionFilter();
+  render();
+
+  Storage.onChange((key) => {
+    if ([Storage.KEYS.participants, Storage.KEYS.users, Storage.KEYS.divisions].includes(key)) { populateDivisionFilter(); render(); }
+  });
+
+  const editId = Helpers.queryParam('id');
+  if (editId && Participants.getById(editId)) openFormModal(editId);
+});
+</script>
+</body>
+</html>

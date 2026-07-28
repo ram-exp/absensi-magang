@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Laporan — Sistem Absensi Anak Magang</title>
+<link rel="stylesheet" href="assets/css/style.css">
+<link rel="stylesheet" href="assets/css/theme.css">
+<link rel="stylesheet" href="assets/css/animations.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js" defer></script>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js" defer></script>
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar" id="app-sidebar"></aside>
+  <div class="main-area">
+    <header class="topbar" id="app-topbar"></header>
+    <main class="main-content" id="main-content">
+
+      <div class="flex-between mb-24" style="flex-wrap:wrap;gap:12px">
+        <div>
+          <h1 class="page-title">Laporan</h1>
+          <p class="page-subtitle">Rekap kehadiran harian, mingguan, dan bulanan.</p>
+        </div>
+        <div class="flex gap-8">
+          <button class="btn btn-secondary btn-sm" id="btn-export-csv"><i data-lucide="download"></i> Export CSV</button>
+          <button class="btn btn-secondary btn-sm" id="btn-print"><i data-lucide="printer"></i> Print</button>
+        </div>
+      </div>
+
+      <div class="tabs no-print" id="period-tabs">
+        <button class="tab-btn active" data-period="daily">Harian</button>
+        <button class="tab-btn" data-period="weekly">Mingguan</button>
+        <button class="tab-btn" data-period="monthly">Bulanan</button>
+      </div>
+
+      <div class="grid grid-4 mb-24" id="rekap-stats"></div>
+
+      <div class="grid grid-2 mb-24">
+        <div class="card card-pad">
+          <div class="card-head"><h3><i data-lucide="pie-chart"></i> Distribusi Status</h3></div>
+          <div class="chart-box"><canvas id="chart-dist"></canvas></div>
+        </div>
+        <div class="card card-pad">
+          <div class="card-head"><h3><i data-lucide="bar-chart-3"></i> Tingkat Kehadiran per Peserta</h3></div>
+          <div class="chart-box"><canvas id="chart-rate"></canvas></div>
+        </div>
+      </div>
+
+      <div class="card card-pad mb-24">
+        <div class="card-head"><h3><i data-lucide="building-2"></i> Distribusi per Bidang</h3></div>
+        <div class="chart-box"><canvas id="chart-division"></canvas></div>
+      </div>
+
+      <div class="card card-pad">
+        <div class="card-head" style="flex-wrap:wrap;gap:10px">
+          <h3><i data-lucide="table"></i> Rekap Detail</h3>
+          <input class="input" style="max-width:240px" type="text" id="f-search" placeholder="Cari peserta…">
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Peserta</th><th>Bidang</th><th>Hadir</th><th>Terlambat</th><th>Izin</th><th>Sakit</th><th>Alpha</th><th>Tingkat Kehadiran</th></tr></thead>
+            <tbody id="rekap-tbody"></tbody>
+          </table>
+        </div>
+        <div id="rekap-empty"></div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script src="assets/js/helpers.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="assets/js/firebase-config.js"></script>
+<script src="assets/js/storage.js"></script>
+<script src="assets/js/auth.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/participants.js"></script>
+<script src="assets/js/attendance.js"></script>
+<script src="assets/js/charts.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+  try {
+    await Storage.init();
+  } catch (e) {
+    document.body.innerHTML = '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;padding:24px;text-align:center;color:#334155"><div><h2 style="margin-bottom:8px">Gagal terhubung ke server data</h2><p style="color:#64748b;max-width:420px">Periksa koneksi internet Anda, lalu muat ulang halaman. (Detail teknis: cek console browser)</p></div></div>';
+    console.error(e);
+    return;
+  }
+  UI.initTheme();
+  const user = Auth.guard(['admin','pembimbing']);
+  if (!user) return;
+  UI.renderShell('laporan', user);
+  UI.bindGlobalCommandPaletteShortcut(user);
+  Auth.initSessionWatcher();
+
+  let period = 'daily';
+  function range() {
+    const today = Helpers.todayISO();
+    if (period === 'daily') return { from: today, to: today, label: Helpers.formatDateLong(today) };
+    if (period === 'weekly') return { from: Helpers.addDays(today, -6), to: today, label: `${Helpers.formatDate(Helpers.addDays(today,-6))} — ${Helpers.formatDate(today)}` };
+    const d = new Date(); const from = `${d.getFullYear()}-${Helpers.pad2(d.getMonth()+1)}-01`;
+    return { from, to: today, label: d.toLocaleDateString('id-ID', { month:'long', year:'numeric' }) };
+  }
+
+  function buildRows() {
+    const { from, to } = range();
+    return Participants.all().map(p => ({ participant: p, summary: Participants.attendanceSummary(p.id, from, to) }));
+  }
+
+  function renderStats(rows) {
+    const totalHadir = rows.reduce((s,r)=>s+r.summary.hadir,0);
+    const totalTerlambat = rows.reduce((s,r)=>s+r.summary.terlambat,0);
+    const totalIzinSakit = rows.reduce((s,r)=>s+r.summary.izin+r.summary.sakit,0);
+    const totalAlpha = rows.reduce((s,r)=>s+r.summary.alpha,0);
+    const el = document.getElementById('rekap-stats');
+    el.innerHTML = [
+      ['check-circle-2','Total Hadir', totalHadir, '#10B981'],
+      ['alarm-clock','Total Terlambat', totalTerlambat, '#F59E0B'],
+      ['calendar-x','Izin / Sakit', totalIzinSakit, '#0EA5E9'],
+      ['x-circle','Total Alpha', totalAlpha, '#F43F5E'],
+    ].map(([ic,label,val,color]) => `<div class="card card-pad stat-card">
+      <div class="stat-icon" style="background:${color}22;color:${color}">${UI.icon(ic,20)}</div>
+      <div class="stat-value">${val}</div><div class="stat-label">${label}</div>
+    </div>`).join('');
+    UI.initLucide();
+  }
+
+  function renderCharts(rows) {
+    const agg = { hadir:0, terlambat:0, izin:0, sakit:0, alpha:0 };
+    rows.forEach(r => Object.keys(agg).forEach(k => agg[k]+=r.summary[k]));
+    Charts.statusDoughnut('chart-dist', agg);
+
+    const top = [...rows].sort((a,b)=>b.summary.attendanceRate-a.summary.attendanceRate).slice(0,8);
+    Charts.participantBar('chart-rate', top.map(r=>r.participant.name.split(' ')[0]), top.map(r=>r.summary.attendanceRate));
+
+    const byDivision = {};
+    Participants.all().forEach(p => byDivision[p.division] = (byDivision[p.division]||0)+1);
+    Charts.distributionBar('chart-division', Object.keys(byDivision), Object.values(byDivision));
+  }
+
+  function renderTable(rows) {
+    const search = document.getElementById('f-search').value.toLowerCase();
+    const filtered = search ? rows.filter(r => r.participant.name.toLowerCase().includes(search)) : rows;
+    const tbody = document.getElementById('rekap-tbody');
+    if (!filtered.length) { tbody.innerHTML=''; document.getElementById('rekap-empty').innerHTML = UI.emptyState({icon:'table', title:'Tidak Ada Data', message:'Belum ada data untuk periode ini.'}); return; }
+    document.getElementById('rekap-empty').innerHTML = '';
+    tbody.innerHTML = filtered.map(r => `<tr>
+      <td><div class="td-avatar"><img src="${r.participant.photo}"><span>${Helpers.sanitize(r.participant.name)}</span></div></td>
+      <td>${Helpers.sanitize(r.participant.division)}</td>
+      <td>${r.summary.hadir}</td><td>${r.summary.terlambat}</td><td>${r.summary.izin}</td><td>${r.summary.sakit}</td><td>${r.summary.alpha}</td>
+      <td><span class="pill ${r.summary.attendanceRate>=80?'pill-hadir':r.summary.attendanceRate>=50?'pill-terlambat':'pill-alpha'}">${r.summary.attendanceRate}%</span></td>
+    </tr>`).join('');
+  }
+
+  function renderAll() {
+    const rows = buildRows();
+    renderStats(rows); renderCharts(rows); renderTable(rows);
+  }
+
+  document.getElementById('period-tabs').addEventListener('click', (e) => {
+    const btn = e.target.closest('.tab-btn'); if (!btn) return;
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active'); period = btn.dataset.period; renderAll();
+  });
+  document.getElementById('f-search').addEventListener('input', Helpers.debounce(() => renderTable(buildRows()), 200));
+
+  document.getElementById('btn-export-csv').addEventListener('click', () => {
+    const rows = buildRows().map(r => ({ Peserta:r.participant.name, Bidang:r.participant.division, Hadir:r.summary.hadir, Terlambat:r.summary.terlambat, Izin:r.summary.izin, Sakit:r.summary.sakit, Alpha:r.summary.alpha, TingkatKehadiran:`${r.summary.attendanceRate}%` }));
+    Helpers.downloadFile(`laporan-${period}-${Helpers.todayISO()}.csv`, Helpers.toCSV(rows), 'text/csv');
+    UI.toast('success','Export Berhasil','File CSV laporan telah diunduh.');
+  });
+  document.getElementById('btn-print').addEventListener('click', () => {
+    const { from, to, label } = range();
+    const rows = buildRows();
+    Helpers.printReport({
+      title: `Laporan Rekap Kehadiran — ${period === 'daily' ? 'Harian' : period === 'weekly' ? 'Mingguan' : 'Bulanan'}`,
+      subtitle: label,
+      meta: [
+        { label: 'Periode', value: `${Helpers.formatDate(from)} — ${Helpers.formatDate(to)}` },
+        { label: 'Total Peserta', value: `${rows.length} peserta` },
+      ],
+      columns: ['Peserta', 'Bidang', 'Hadir', 'Terlambat', 'Izin', 'Sakit', 'Alpha', 'Tingkat Hadir'],
+      rows: rows.map(r => [r.participant.name, r.participant.division, r.summary.hadir, r.summary.terlambat, r.summary.izin, r.summary.sakit, r.summary.alpha, `${r.summary.attendanceRate}%`]),
+    });
+  });
+
+  renderAll();
+});
+</script>
+</body>
+</html>

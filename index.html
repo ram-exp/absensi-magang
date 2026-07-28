@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sistem Absensi Anak Magang</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2224%22 fill=%22%236366F1%22/><text x=%2250%22 y=%2266%22 font-size=%2255%22 fill=%22white%22 text-anchor=%22middle%22 font-family=%22Arial%22>A</text></svg>">
+<style>
+  html,body{height:100%;margin:0;background:#0B0D14;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif}
+  .loader{width:42px;height:42px;border:3px solid rgba(255,255,255,.15);border-top-color:#6366F1;border-radius:50%;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="loader"></div>
+<script src="assets/js/helpers.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="assets/js/firebase-config.js"></script>
+<script src="assets/js/storage.js"></script>
+<script src="assets/js/auth.js"></script>
+<script>
+(async () => {
+  try {
+    await Storage.init();
+  } catch (e) {
+    document.body.innerHTML = '<div style="color:#fff;font-family:system-ui,sans-serif;text-align:center;padding:24px"><h2>Gagal terhubung ke server data</h2><p style="opacity:.7">Periksa koneksi internet Anda, lalu muat ulang halaman.</p></div>';
+    console.error(e);
+    return;
+  }
+  const user = Auth.currentUser();
+  window.location.replace(user ? 'dashboard.html' : 'login.html');
+})();
+</script>
+</body>
+</html>

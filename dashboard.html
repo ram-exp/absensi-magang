@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard — Sistem Absensi Anak Magang</title>
+<link rel="stylesheet" href="assets/css/style.css">
+<link rel="stylesheet" href="assets/css/theme.css">
+<link rel="stylesheet" href="assets/css/animations.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js" defer></script>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js" defer></script>
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar" id="app-sidebar"></aside>
+  <div class="main-area">
+    <header class="topbar" id="app-topbar"></header>
+    <main class="main-content" id="main-content">
+      <div class="flex-between mb-24" style="flex-wrap:wrap;gap:12px">
+        <div>
+          <h1 class="page-title" id="greeting-title">Dashboard</h1>
+          <p class="page-subtitle" id="greeting-sub">Memuat data…</p>
+        </div>
+        <div class="flex gap-8">
+          <button class="btn btn-secondary btn-sm" id="btn-refresh"><i data-lucide="refresh-cw"></i> Segarkan</button>
+        </div>
+      </div>
+
+      <div class="grid grid-4 mb-24" id="stat-grid">
+        <div class="skeleton sk-card"></div><div class="skeleton sk-card"></div>
+        <div class="skeleton sk-card"></div><div class="skeleton sk-card"></div>
+      </div>
+
+      <div class="widget-grid stagger-in" id="widget-grid"></div>
+    </main>
+  </div>
+</div>
+
+<!-- Widget templates (moved into widget-grid by JS) -->
+<template id="tpl-trend">
+  <div class="card card-pad widget" data-widget="trend" style="grid-column:span 2">
+    <div class="card-head"><h3><i data-lucide="grip-vertical" class="widget-drag-handle" style="width:14px;height:14px;margin-right:6px;vertical-align:-2px"></i>Tren Kehadiran</h3></div>
+    <div class="chart-box"><canvas id="chart-trend"></canvas></div>
+  </div>
+</template>
+
+<template id="tpl-status">
+  <div class="card card-pad widget" data-widget="status">
+    <div class="card-head"><h3><i data-lucide="grip-vertical" class="widget-drag-handle" style="width:14px;height:14px;margin-right:6px;vertical-align:-2px"></i>Status Hari Ini</h3></div>
+    <div class="chart-box sm"><canvas id="chart-status"></canvas></div>
+  </div>
+</template>
+
+<template id="tpl-calendar">
+  <div class="card card-pad widget" data-widget="calendar">
+    <div class="card-head"><h3><i data-lucide="grip-vertical" class="widget-drag-handle" style="width:14px;height:14px;margin-right:6px;vertical-align:-2px"></i>Kalender Kehadiran</h3><span class="text-muted text-mono" id="cal-month-label" style="font-size:11px"></span></div>
+    <select class="input hidden" id="cal-participant-select" style="margin-bottom:10px"></select>
+    <div class="cal-grid" id="cal-dow-row"></div>
+    <div class="cal-grid mt-8" id="cal-grid"></div>
+  </div>
+</template>
+
+<template id="tpl-activity">
+  <div class="card card-pad widget" data-widget="activity">
+    <div class="card-head"><h3><i data-lucide="grip-vertical" class="widget-drag-handle" style="width:14px;height:14px;margin-right:6px;vertical-align:-2px"></i>Aktivitas Terbaru</h3></div>
+    <div id="activity-list"></div>
+  </div>
+</template>
+
+<template id="tpl-announce">
+  <div class="card card-pad widget" data-widget="announce" id="pengumuman">
+    <div class="card-head"><h3><i data-lucide="grip-vertical" class="widget-drag-handle" style="width:14px;height:14px;margin-right:6px;vertical-align:-2px"></i>Pengumuman</h3><button class="icon-btn hidden" id="btn-add-announce" title="Tambah Pengumuman"><i data-lucide="plus"></i></button></div>
+    <div id="announce-list" class="flex gap-12" style="flex-direction:column"></div>
+  </div>
+</template>
+
+<template id="tpl-agenda">
+  <div class="card card-pad widget" data-widget="agenda">
+    <div class="card-head"><h3><i data-lucide="grip-vertical" class="widget-drag-handle" style="width:14px;height:14px;margin-right:6px;vertical-align:-2px"></i>Agenda / Kegiatan</h3><button class="icon-btn hidden" id="btn-add-agenda" title="Tambah Agenda"><i data-lucide="plus"></i></button></div>
+    <div class="timeline" id="agenda-list"></div>
+  </div>
+</template>
+
+<template id="tpl-ranking">
+  <div class="card card-pad widget" data-widget="ranking">
+    <div class="card-head"><h3><i data-lucide="grip-vertical" class="widget-drag-handle" style="width:14px;height:14px;margin-right:6px;vertical-align:-2px"></i>Ranking Kehadiran</h3></div>
+    <div id="ranking-list"></div>
+  </div>
+</template>
+
+<template id="tpl-badges">
+  <div class="card card-pad widget" data-widget="badges" style="grid-column:span 2">
+    <div class="card-head"><h3><i data-lucide="grip-vertical" class="widget-drag-handle" style="width:14px;height:14px;margin-right:6px;vertical-align:-2px"></i>Badge &amp; Pencapaian</h3></div>
+    <div class="badge-grid" id="badge-grid"></div>
+  </div>
+</template>
+
+<template id="tpl-countdown">
+  <div class="card card-pad widget" data-widget="countdown">
+    <div class="card-head"><h3><i data-lucide="grip-vertical" class="widget-drag-handle" style="width:14px;height:14px;margin-right:6px;vertical-align:-2px"></i>Progres Magang</h3></div>
+    <div class="flex-center mb-16">
+      <svg class="progress-ring" width="120" height="120" viewBox="0 0 120 120">
+        <circle class="track" cx="60" cy="60" r="52" stroke-width="10"/>
+        <circle class="fill" id="progress-ring-fill" cx="60" cy="60" r="52" stroke-width="10"/>
+      </svg>
+    </div>
+    <div class="countdown-grid" id="countdown-grid"></div>
+  </div>
+</template>
+
+<script src="assets/js/helpers.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="assets/js/firebase-config.js"></script>
+<script src="assets/js/storage.js"></script>
+<script src="assets/js/auth.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/participants.js"></script>
+<script src="assets/js/attendance.js"></script>
+<script src="assets/js/dashboard.js"></script>
+<script src="assets/js/charts.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+  try {
+    await Storage.init();
+  } catch (e) {
+    document.body.innerHTML = '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;padding:24px;text-align:center;color:#334155"><div><h2 style="margin-bottom:8px">Gagal terhubung ke server data</h2><p style="color:#64748b;max-width:420px">Periksa koneksi internet Anda, lalu muat ulang halaman. (Detail teknis: cek console browser)</p></div></div>';
+    console.error(e);
+    return;
+  }
+  UI.initTheme();
+  const user = Auth.guard();
+  if (!user) return;
+  UI.renderShell('dashboard', user);
+  UI.bindGlobalCommandPaletteShortcut(user);
+  Auth.initSessionWatcher();
+
+  const hour = new Date().getHours();
+  const greet = hour < 11 ? 'Selamat Pagi' : hour < 15 ? 'Selamat Siang' : hour < 18 ? 'Selamat Sore' : 'Selamat Malam';
+  document.getElementById('greeting-title').textContent = `${greet}, ${user.name.split(' ')[0]} 👋`;
+  document.getElementById('greeting-sub').textContent = Helpers.formatDateLong(Helpers.todayISO());
+
+  const isStaff = ['admin', 'pembimbing'].includes(user.role);
+  const myParticipant = user.participantId ? Participants.getById(user.participantId) : null;
+
+  function renderStats() {
+    const grid = document.getElementById('stat-grid');
+    if (isStaff) {
+      const s = Dashboard.globalStats();
+      grid.innerHTML = statCard('users', 'Total Peserta', s.totalParticipants, '#6366F1') +
+        statCard('check-circle-2', 'Hadir Hari Ini', s.hadirToday, '#10B981') +
+        statCard('alarm-clock', 'Terlambat Hari Ini', s.terlambatToday, '#F59E0B') +
+        statCard('calendar-x', 'Izin/Sakit', s.izinSakitToday, '#0EA5E9');
+    } else if (myParticipant) {
+      const sum = Participants.attendanceSummary(myParticipant.id);
+      const streak = Attendance.currentStreak(myParticipant.id);
+      grid.innerHTML = statCard('flame', 'Streak Kehadiran', `${streak} hari`, '#F59E0B') +
+        statCard('percent', 'Tingkat Kehadiran', `${sum.attendanceRate}%`, '#10B981') +
+        statCard('calendar-days', 'Sisa Hari Magang', `${Participants.daysRemaining(myParticipant)} hari`, '#6366F1') +
+        statCard('trending-up', 'Progres Magang', `${Participants.progress(myParticipant)}%`, '#8B5CF6');
+    } else {
+      grid.innerHTML = UI.emptyState({ icon:'user-x', title:'Data Peserta Tidak Ditemukan', message:'Akun Anda belum tertaut ke data peserta magang.' });
+    }
+    UI.initLucide();
+  }
+  function statCard(ic, label, value, color) {
+    return `<div class="card card-pad stat-card card-hover">
+      <div class="stat-top">
+        <div class="stat-icon" style="background:${color}22;color:${color}">${UI.icon(ic,20)}</div>
+      </div>
+      <div class="stat-value">${value}</div>
+      <div class="stat-label">${label}</div>
+    </div>`;
+  }
+
+  // ---------------- Widgets ----------------
+  const defaultOrderStaff = ['trend','status','activity','ranking','calendar','announce','agenda'];
+  const defaultOrderPeserta = ['countdown','trend','status','badges','calendar','announce','agenda'];
+  const order = Dashboard.getWidgetOrder(isStaff ? defaultOrderStaff : defaultOrderPeserta);
+
+  function mountWidgets() {
+    const grid = document.getElementById('widget-grid');
+    grid.innerHTML = '';
+    order.forEach(id => {
+      const tpl = document.getElementById(`tpl-${id}`);
+      if (!tpl) return;
+      const node = tpl.content.cloneNode(true);
+      grid.appendChild(node);
+    });
+    UI.initLucide();
+    initDragDrop(grid);
+    fillWidgets();
+  }
+
+  function initDragDrop(grid) {
+    let dragEl = null;
+    grid.querySelectorAll('.widget').forEach(w => {
+      w.draggable = true;
+      w.addEventListener('dragstart', () => { dragEl = w; setTimeout(() => w.classList.add('dragging'), 0); });
+      w.addEventListener('dragend', () => { w.classList.remove('dragging'); grid.querySelectorAll('.widget').forEach(x=>x.classList.remove('drag-over')); persistOrder(grid); });
+      w.addEventListener('dragover', (e) => { e.preventDefault(); if (w !== dragEl) w.classList.add('drag-over'); });
+      w.addEventListener('dragleave', () => w.classList.remove('drag-over'));
+      w.addEventListener('drop', (e) => {
+        e.preventDefault(); w.classList.remove('drag-over');
+        if (!dragEl || dragEl === w) return;
+        const all = [...grid.querySelectorAll('.widget')];
+        const dragIdx = all.indexOf(dragEl), dropIdx = all.indexOf(w);
+        if (dragIdx < dropIdx) w.after(dragEl); else w.before(dragEl);
+      });
+    });
+  }
+  function persistOrder(grid) {
+    const ids = [...grid.querySelectorAll('.widget')].map(w => w.dataset.widget);
+    Dashboard.saveWidgetOrder(ids);
+    UI.toast('info', 'Tata Letak Disimpan', 'Susunan widget dashboard telah diperbarui.', 2000);
+  }
+
+  let selectedCalendarPid = null;
+
+  function fillWidgets() {
+    const pid = isStaff ? selectedCalendarPid : (myParticipant ? myParticipant.id : null);
+
+    // Trend (last 8 weeks aggregated)
+    if (document.getElementById('chart-trend')) {
+      const records = isStaff ? Storage.list(Storage.KEYS.attendance) : Attendance.forParticipant(pid);
+      const points = [];
+      for (let i = 7; i >= 0; i--) {
+        const from = Helpers.addDays(Helpers.todayISO(), -(i * 7 + 6));
+        const to = Helpers.addDays(Helpers.todayISO(), -(i * 7));
+        const inRange = records.filter(r => r.date >= from && r.date <= to);
+        points.push({ label: Helpers.formatDate(to, { day:'2-digit', month:'2-digit', year:undefined }), hadir: inRange.filter(r=>r.status==='hadir').length, terlambat: inRange.filter(r=>r.status==='terlambat').length });
+      }
+      Charts.trendLine('chart-trend', points);
+    }
+
+    // Status doughnut (today, staff) or overall (peserta)
+    if (document.getElementById('chart-status')) {
+      const summary = isStaff
+        ? (() => { const t = Storage.list(Storage.KEYS.attendance).filter(a=>a.date===Helpers.todayISO()); const s={hadir:0,terlambat:0,izin:0,sakit:0,alpha:0}; t.forEach(a=>s[a.status]=(s[a.status]||0)+1); return s; })()
+        : Participants.attendanceSummary(pid);
+      Charts.statusDoughnut('chart-status', summary);
+    }
+
+    // Calendar
+    if (document.getElementById('cal-grid')) {
+      const sel = document.getElementById('cal-participant-select');
+      if (isStaff) {
+        sel.classList.remove('hidden');
+        const all = Participants.all();
+        if (!sel.dataset.bound) {
+          sel.dataset.bound = '1';
+          sel.innerHTML = `<option value="">— Pilih Peserta —</option>` + all.map(p => `<option value="${p.id}">${Helpers.sanitize(p.name)}</option>`).join('');
+          if (all.length === 1) { selectedCalendarPid = all[0].id; sel.value = all[0].id; }
+          sel.addEventListener('change', () => { selectedCalendarPid = sel.value || null; fillWidgets(); });
+        }
+        sel.value = selectedCalendarPid || '';
+      } else {
+        sel.classList.add('hidden');
+      }
+
+      const dowRow = document.getElementById('cal-dow-row');
+      dowRow.innerHTML = '';
+      ['Min','Sen','Sel','Rab','Kam','Jum','Sab'].forEach(d => dowRow.insertAdjacentHTML('beforeend', `<div class="cal-dow">${d}</div>`));
+      const now = new Date();
+      document.getElementById('cal-month-label').textContent = now.toLocaleDateString('id-ID', { month:'long', year:'numeric' });
+      const cells = pid ? Dashboard.calendarCells(pid, now.getFullYear(), now.getMonth()) : [];
+      const colors = Charts.statusColors();
+      const calGrid = document.getElementById('cal-grid');
+      if (!cells.length) { calGrid.innerHTML = UI.emptyState({icon:'calendar', title:'Belum Ada Data', message:'Pilih peserta untuk melihat kalender.'}); }
+      else calGrid.innerHTML = cells.map(c => c.empty ? `<div class="cal-cell empty"></div>` :
+        `<div class="cal-cell${c.isToday?' today':''}" title="${c.status?Helpers.statusLabel(c.status):'Belum ada data'}">${c.day}${c.status?`<span class="dot" style="background:${colors[c.status]}"></span>`:''}</div>`
+      ).join('');
+    }
+
+    // Activity feed
+    if (document.getElementById('activity-list')) {
+      const acts = Dashboard.recentActivity(7);
+      const el = document.getElementById('activity-list');
+      el.innerHTML = acts.length ? `<div class="timeline">${acts.map(a => `
+        <div class="timeline-item">
+          <div class="tl-time">${Helpers.formatDate(a.date)} · ${a.checkIn}</div>
+          <div class="tl-title">${Helpers.sanitize(a.participantName)} check-in <span class="pill pill-${a.status}">${Helpers.statusLabel(a.status)}</span></div>
+        </div>`).join('')}</div>` : UI.emptyState({icon:'activity', title:'Belum Ada Aktivitas', message:'Aktivitas absensi akan muncul di sini.'});
+    }
+
+    // Announcements
+    if (document.getElementById('announce-list')) {
+      const addBtn = document.getElementById('btn-add-announce');
+      if (isStaff) { addBtn.classList.remove('hidden'); if (!addBtn.dataset.bound) { addBtn.dataset.bound = '1'; addBtn.addEventListener('click', openAddAnnouncementModal); } }
+      const anns = Storage.list(Storage.KEYS.announcements).sort((a,b)=>b.date.localeCompare(a.date));
+      const el = document.getElementById('announce-list');
+      el.innerHTML = anns.length ? anns.map(a => `<div class="announce-card" style="position:relative">
+          ${isStaff ? `<button class="icon-btn btn-del-announce" data-id="${a.id}" title="Hapus" style="position:absolute;top:8px;right:8px;width:26px;height:26px">${UI.icon('trash-2',13)}</button>` : ''}
+          <b style="font-size:.875rem">${Helpers.sanitize(a.title)}</b><p class="text-secondary" style="font-size:.8125rem;margin-top:4px">${Helpers.sanitize(a.content)}</p><span class="text-muted" style="font-size:11px">${Helpers.formatDate(a.date)} · ${Helpers.sanitize(a.author)}</span></div>`).join('') : UI.emptyState({icon:'megaphone', title:'Tidak Ada Pengumuman', message:'Pengumuman terbaru akan muncul di sini.'});
+      UI.initLucide();
+      el.querySelectorAll('.btn-del-announce').forEach(b => b.addEventListener('click', () => {
+        UI.confirmDialog({ title:'Hapus pengumuman?', message:'Pengumuman ini akan dihapus permanen.', danger:true, confirmText:'Hapus', onConfirm: () => {
+          Storage.saveList(Storage.KEYS.announcements, Storage.list(Storage.KEYS.announcements).filter(x=>x.id!==b.dataset.id));
+          fillWidgets(); UI.toast('success','Terhapus','Pengumuman berhasil dihapus.');
+        }});
+      }));
+    }
+
+    // Agenda
+    if (document.getElementById('agenda-list')) {
+      const addBtn = document.getElementById('btn-add-agenda');
+      if (isStaff) { addBtn.classList.remove('hidden'); if (!addBtn.dataset.bound) { addBtn.dataset.bound = '1'; addBtn.addEventListener('click', openAddAgendaModal); } }
+      const ag = Storage.list(Storage.KEYS.agenda).sort((a,b)=>a.date.localeCompare(b.date));
+      const el = document.getElementById('agenda-list');
+      el.innerHTML = ag.length ? ag.map(a => `<div class="timeline-item" style="position:relative">
+          ${isStaff ? `<button class="icon-btn btn-del-agenda" data-id="${a.id}" title="Hapus" style="position:absolute;top:0;right:0;width:26px;height:26px">${UI.icon('trash-2',13)}</button>` : ''}
+          <div class="tl-time">${Helpers.formatDate(a.date)} · ${a.time}</div><div class="tl-title">${Helpers.sanitize(a.title)}</div><div class="text-secondary" style="font-size:.8125rem">${Helpers.sanitize(a.desc)}</div></div>`).join('') : UI.emptyState({icon:'calendar-clock', title:'Belum Ada Agenda', message:'Agenda kegiatan akan tampil di sini.'});
+      UI.initLucide();
+      el.querySelectorAll('.btn-del-agenda').forEach(b => b.addEventListener('click', () => {
+        UI.confirmDialog({ title:'Hapus agenda?', message:'Agenda ini akan dihapus permanen.', danger:true, confirmText:'Hapus', onConfirm: () => {
+          Storage.saveList(Storage.KEYS.agenda, Storage.list(Storage.KEYS.agenda).filter(x=>x.id!==b.dataset.id));
+          fillWidgets(); UI.toast('success','Terhapus','Agenda berhasil dihapus.');
+        }});
+      }));
+    }
+
+    // Ranking (staff)
+    if (document.getElementById('ranking-list')) {
+      const board = Participants.leaderboard().slice(0, 6);
+      const el = document.getElementById('ranking-list');
+      el.innerHTML = board.length ? board.map((r, i) => `<div class="rank-item ${i===0?'top1':i===1?'top2':i===2?'top3':''}">
+        <div class="rank-num">${i+1}</div>
+        <img src="${r.participant.photo}" style="width:28px;height:28px;border-radius:50%;object-fit:cover">
+        <div class="rank-name">${Helpers.sanitize(r.participant.name)}</div>
+        <div class="rank-score">${r.score}</div>
+      </div>`).join('') : UI.emptyState({icon:'trophy', title:'Belum Ada Data', message:'Ranking akan muncul setelah ada data absensi.'});
+    }
+
+    // Badges (peserta)
+    if (document.getElementById('badge-grid') && pid) {
+      const badges = Dashboard.badgesFor(pid);
+      document.getElementById('badge-grid').innerHTML = badges.map(b => `
+        <div class="badge-item${b.unlocked?'':' locked'}">
+          <div class="b-icon">${UI.icon(b.icon, 22)}</div>
+          <div class="b-name">${b.name}</div>
+        </div>`).join('');
+      UI.initLucide();
+      const perfect = Attendance.isPerfectAttendance(pid, Helpers.addDays(Helpers.todayISO(), -30), Helpers.todayISO());
+      if (perfect && !sessionStorage.getItem('confetti_shown')) { UI.fireConfetti(); sessionStorage.setItem('confetti_shown','1'); }
+    }
+
+    // Countdown / progress ring (peserta)
+    if (document.getElementById('countdown-grid') && myParticipant) {
+      const pct = Participants.progress(myParticipant);
+      const r = 52, circumference = 2 * Math.PI * r;
+      const fillEl = document.getElementById('progress-ring-fill');
+      fillEl.style.strokeDasharray = circumference;
+      fillEl.style.strokeDashoffset = circumference - (pct/100) * circumference;
+      const days = Participants.daysRemaining(myParticipant);
+      document.getElementById('countdown-grid').innerHTML = `
+        <div class="countdown-box"><div class="cd-num">${days}</div><div class="cd-label">Hari Tersisa</div></div>
+        <div class="countdown-box"><div class="cd-num">${pct}%</div><div class="cd-label">Progres</div></div>`;
+    }
+  }
+
+  function openAddAnnouncementModal() {
+    UI.openModal({ title: 'Tambah Pengumuman', bodyHtml: `
+      <div class="field"><label>Judul <span class="req">*</span></label><input class="input" id="an-title"></div>
+      <div class="field"><label>Isi Pengumuman <span class="req">*</span></label><textarea class="input" id="an-content" rows="4"></textarea></div>
+      <div class="error-msg show hidden" id="an-error"></div>
+    `, footHtml: `<button class="btn btn-secondary" onclick="UI.closeModal()">Batal</button><button class="btn btn-primary" id="an-save">Simpan</button>` });
+    document.getElementById('an-save').addEventListener('click', () => {
+      const title = document.getElementById('an-title').value.trim();
+      const content = document.getElementById('an-content').value.trim();
+      if (!title || !content) { const e = document.getElementById('an-error'); e.textContent = 'Judul dan isi pengumuman wajib diisi.'; e.classList.remove('hidden'); return; }
+      const list = Storage.list(Storage.KEYS.announcements);
+      list.unshift({ id: Helpers.uid('an'), title: Helpers.cleanInput(title), content: Helpers.cleanInput(content), date: Helpers.todayISO(), author: user.name });
+      Storage.saveList(Storage.KEYS.announcements, list);
+      UI.closeModal(); fillWidgets(); UI.toast('success', 'Tersimpan', 'Pengumuman berhasil ditambahkan.');
+    });
+  }
+
+  function openAddAgendaModal() {
+    UI.openModal({ title: 'Tambah Agenda / Kegiatan', bodyHtml: `
+      <div class="field"><label>Judul Kegiatan <span class="req">*</span></label><input class="input" id="ag-title"></div>
+      <div class="grid grid-2" style="gap:0 16px">
+        <div class="field"><label>Tanggal <span class="req">*</span></label><input class="input" type="date" id="ag-date" value="${Helpers.todayISO()}"></div>
+        <div class="field"><label>Waktu <span class="req">*</span></label><input class="input" type="time" id="ag-time" value="09:00"></div>
+      </div>
+      <div class="field"><label>Deskripsi</label><textarea class="input" id="ag-desc" rows="3"></textarea></div>
+      <div class="error-msg show hidden" id="ag-error"></div>
+    `, footHtml: `<button class="btn btn-secondary" onclick="UI.closeModal()">Batal</button><button class="btn btn-primary" id="ag-save">Simpan</button>` });
+    document.getElementById('ag-save').addEventListener('click', () => {
+      const title = document.getElementById('ag-title').value.trim();
+      const date = document.getElementById('ag-date').value;
+      const time = document.getElementById('ag-time').value;
+      if (!title || !date || !time) { const e = document.getElementById('ag-error'); e.textContent = 'Judul, tanggal, dan waktu wajib diisi.'; e.classList.remove('hidden'); return; }
+      const list = Storage.list(Storage.KEYS.agenda);
+      list.push({ id: Helpers.uid('ag'), title: Helpers.cleanInput(title), date, time, desc: Helpers.cleanInput(document.getElementById('ag-desc').value.trim()) });
+      Storage.saveList(Storage.KEYS.agenda, list);
+      UI.closeModal(); fillWidgets(); UI.toast('success', 'Tersimpan', 'Agenda berhasil ditambahkan.');
+    });
+  }
+
+  document.getElementById('btn-refresh').addEventListener('click', () => { renderStats(); fillWidgets(); UI.toast('success','Data Diperbarui','Dashboard berhasil disegarkan.',1800); });
+
+  // Live update: re-render automatically when data changes from another device.
+  Storage.onChange((key) => {
+    if ([Storage.KEYS.attendance, Storage.KEYS.participants, Storage.KEYS.announcements, Storage.KEYS.agenda].includes(key)) {
+      renderStats(); fillWidgets();
+    }
+  });
+
+  setTimeout(() => { renderStats(); mountWidgets(); }, 350);
+});
+</script>
+</body>
+</html>
