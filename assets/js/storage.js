@@ -89,8 +89,9 @@ const Storage = (() => {
     if (key === KEYS.settings) {
       const doc = { id: 'app', ...value };
       cache[key] = [doc];
-      docRef(key, 'app').set(doc).catch(e => console.error('Firestore write error', key, e));
-      return true;
+      // Kembalikan Promise-nya (bukan `true` langsung) supaya caller yang butuh
+      // kepastian tulisan selesai (mis. seedIfEmpty) bisa `await` ini.
+      return docRef(key, 'app').set(doc).then(() => true).catch(e => { console.error('Firestore write error', key, e); return false; });
     }
     return saveList(key, Array.isArray(value) ? value : []);
   }
@@ -118,7 +119,7 @@ const Storage = (() => {
   };
 
   const saveList = (key, arr) => {
-    if (LOCAL_ONLY.has(key)) { localSet(key, arr); return true; }
+    if (LOCAL_ONLY.has(key)) { localSet(key, arr); return Promise.resolve(true); }
     const prev = cache[key] || [];
     const nextIds = new Set(arr.map(x => x.id));
     cache[key] = arr.map(x => ({ ...x })); // optimistic
@@ -130,13 +131,16 @@ const Storage = (() => {
       ];
       const chunks = [];
       for (let i = 0; i < ops.length; i += 450) chunks.push(ops.slice(i, i + 450));
-      chunks.reduce((p, chunk) => p.then(() => {
+      // PENTING: kembalikan Promise chain-nya (bukan `true` langsung) supaya
+      // pemanggil yang butuh kepastian (mis. seedIfEmpty) bisa `await` sampai
+      // benar-benar tersimpan di Firestore, bukan cuma "terkirim".
+      return chunks.reduce((p, chunk) => p.then(() => {
         const batch = db.batch();
         chunk.forEach(op => op.type === 'set' ? batch.set(docRef(key, op.item.id), op.item) : batch.delete(docRef(key, op.item.id)));
         return batch.commit();
-      }), Promise.resolve()).catch(e => console.error('Firestore batch write error', key, e));
+      }), Promise.resolve()).then(() => true).catch(e => { console.error('Firestore batch write error', key, e); return false; });
     }
-    return true;
+    return Promise.resolve(true);
   };
 
   const remove = (key, id) => {
@@ -240,17 +244,17 @@ const Storage = (() => {
     ];
     const participants = participantSeed.map((args, idx) => mkParticipant(idx, ...args));
     participants.forEach(p => { p.supervisorId = 'u_pembimbing'; p.supervisor = 'Yusuf Hidayat'; });
-    saveList(KEYS.participants, participants);
+    await saveList(KEYS.participants, participants);
 
     const users = [
       { id: 'u_admin', username: 'admin', password: 'admin123', role: 'admin', name: 'Rina Kusuma', title: 'HR Administrator', avatar: null },
       { id: 'u_pembimbing', username: 'pembimbing', password: 'bimbing123', role: 'pembimbing', name: 'Yusuf Hidayat', title: 'Pembimbing Lapangan', avatar: null },
       { id: 'u_peserta', username: 'peserta', password: 'magang123', role: 'peserta', name: participants[0].name, title: participants[0].division, avatar: null, participantId: participants[0].id },
     ];
-    saveList(KEYS.users, users);
+    await saveList(KEYS.users, users);
 
-    saveList(KEYS.divisions, [...new Set(participants.map(p => p.division))]);
-    saveList(KEYS.passwordResetRequests, []);
+    await saveList(KEYS.divisions, [...new Set(participants.map(p => p.division))]);
+    await saveList(KEYS.passwordResetRequests, []);
 
     // Generate ~30 working days of attendance history per participant
     const attendance = [];
@@ -277,25 +281,25 @@ const Storage = (() => {
         });
       }
     });
-    saveList(KEYS.attendance, attendance);
+    await saveList(KEYS.attendance, attendance);
 
-    saveList(KEYS.announcements, [
+    await saveList(KEYS.announcements, [
       { id: Helpers.uid('an'), title: 'Selamat Datang Peserta Magang Batch Juli 2026', content: 'Selamat bergabung! Silakan lengkapi profil dan absen setiap hari kerja melalui menu Absensi.', date: Helpers.todayISO(), author: 'Rina Kusuma' },
       { id: Helpers.uid('an'), title: 'Libur Nasional 17 Agustus', content: 'Kantor libur pada tanggal 17 Agustus 2026 dalam rangka HUT Kemerdekaan RI.', date: Helpers.todayISO(), author: 'Rina Kusuma' },
     ]);
 
-    saveList(KEYS.agenda, [
+    await saveList(KEYS.agenda, [
       { id: Helpers.uid('ag'), title: 'Onboarding & Pengenalan Tim', date: Helpers.addDays(Helpers.todayISO(), 1), time: '09:00', desc: 'Sesi perkenalan seluruh tim divisi.' },
       { id: Helpers.uid('ag'), title: 'Sharing Session: Git Workflow', date: Helpers.addDays(Helpers.todayISO(), 3), time: '13:00', desc: 'Pembahasan alur kerja Git & code review.' },
     ]);
 
-    saveList(KEYS.notes, []);
-    saveList(KEYS.assessments, [
+    await saveList(KEYS.notes, []);
+    await saveList(KEYS.assessments, [
       { id: Helpers.uid('as'), participantId: participants[0].id, supervisor: 'Yusuf Hidayat', date: Helpers.todayISO(), score: 88, note: 'Progres baik, komunikatif dan proaktif.' },
     ]);
-    saveList(KEYS.documents, []);
-    saveList(KEYS.loginHistory, []);
-    set(KEYS.settings, { id: 'app' });
+    await saveList(KEYS.documents, []);
+    await saveList(KEYS.loginHistory, []);
+    await set(KEYS.settings, { id: 'app' });
 
     function mkParticipant(idx, name, email, institution, division, start, end) {
       return {
