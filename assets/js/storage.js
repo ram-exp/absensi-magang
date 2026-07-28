@@ -42,6 +42,14 @@ const Storage = (() => {
   const LOCAL_ONLY = new Set([KEYS.session, KEYS.widgetOrder]);
   const CLOUD_KEYS = Object.values(KEYS).filter(k => !LOCAL_ONLY.has(k) && k !== KEYS.seeded);
 
+  // `divisions` holds a plain array of STRINGS (not objects with an `.id`), unlike
+  // every other collection here. The generic list()/saveList() below assume items
+  // are objects with `.id` (they do `{...item}` and `item.id`) — spreading a string
+  // like `{...'UI/UX Design'}` silently turns it into a char-indexed object, which
+  // is why it rendered as "[object Object]". So we store it as ONE document
+  // (like `settings`) holding an `items` array field, instead of one-doc-per-item.
+  const SINGLE_DOC_LIST_KEYS = new Set([KEYS.divisions]);
+
   // ---------------- raw localStorage (for local-only keys) ----------------
   function localGet(key, fallback) {
     try {
@@ -81,6 +89,7 @@ const Storage = (() => {
   function get(key, fallback) {
     if (LOCAL_ONLY.has(key)) return localGet(key, fallback);
     if (key === KEYS.settings) return cache[key] && cache[key][0] ? cache[key][0] : fallback;
+    if (SINGLE_DOC_LIST_KEYS.has(key)) return list(key);
     return cache[key] !== undefined ? cache[key] : fallback;
   }
 
@@ -99,6 +108,9 @@ const Storage = (() => {
   // ---- Generic collection helpers (used everywhere else in the app) ----
   const list = (key) => {
     if (LOCAL_ONLY.has(key)) return localGet(key, []);
+    if (SINGLE_DOC_LIST_KEYS.has(key)) {
+      return cache[key] && cache[key][0] && Array.isArray(cache[key][0].items) ? [...cache[key][0].items] : [];
+    }
     return cache[key] ? cache[key].map(x => ({ ...x })) : [];
   };
 
@@ -120,6 +132,12 @@ const Storage = (() => {
 
   const saveList = (key, arr) => {
     if (LOCAL_ONLY.has(key)) { localSet(key, arr); return Promise.resolve(true); }
+    if (SINGLE_DOC_LIST_KEYS.has(key)) {
+      const doc = { id: 'list', items: [...arr] };
+      cache[key] = [doc]; // optimistic
+      if (!db) return Promise.resolve(true);
+      return docRef(key, 'list').set(doc).then(() => true).catch(e => { console.error('Firestore write error', key, e); return false; });
+    }
     const prev = cache[key] || [];
     const nextIds = new Set(arr.map(x => x.id));
     cache[key] = arr.map(x => ({ ...x })); // optimistic
