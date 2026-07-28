@@ -22,6 +22,20 @@ const Helpers = (() => {
     return String(str).replace(/<[^>]*>?/gm, '').trim();
   }
 
+  /** Cryptographically-random password (falls back to Math.random if crypto is unavailable). */
+  function generatePassword(length = 10) {
+    const chars = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/l/i to avoid confusion
+    let out = '';
+    if (window.crypto && crypto.getRandomValues) {
+      const bytes = new Uint32Array(length);
+      crypto.getRandomValues(bytes);
+      for (let i = 0; i < length; i++) out += chars[bytes[i] % chars.length];
+    } else {
+      for (let i = 0; i < length; i++) out += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return out;
+  }
+
   function uid(prefix = 'id') {
     return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
   }
@@ -201,7 +215,7 @@ const Helpers = (() => {
   }
 
   return {
-    sanitize, cleanInput, uid, generateParticipantId, pad2, todayISO, nowTime,
+    sanitize, cleanInput, uid, generatePassword, generateParticipantId, pad2, todayISO, nowTime,
     formatDate, formatDateLong, formatDateTime, formatTimeAgo, daysBetween, addDays,
     clamp, debounce, fileToBase64, downloadFile, toCSV, printReport, initials, colorFromString,
     avatarDataUri, statusLabel, queryParam

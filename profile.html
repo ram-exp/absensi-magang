@@ -70,6 +70,7 @@ document.addEventListener('DOMContentLoaded', async function () {
   const user = Auth.guard();
   if (!user) return;
   UI.renderShell('profile', user);
+  UI.wireAllPasswordToggles(document);
   UI.bindGlobalCommandPaletteShortcut(user);
   Auth.initSessionWatcher();
 

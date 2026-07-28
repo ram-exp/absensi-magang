@@ -198,6 +198,44 @@ const UI = (() => {
     if (window.lucide) window.lucide.createIcons();
   }
 
+  // ---------------- Password field: show/hide toggle ----------------
+  /** Wire a single <input type="password"> with an eye/eye-off toggle button. Safe to call twice. */
+  function wirePasswordToggle(input) {
+    if (!input || input.dataset.pwWired) return;
+    input.dataset.pwWired = '1';
+
+    let wrap = input.parentElement;
+    const alreadyWrapped = wrap && (wrap.classList.contains('input-icon-wrap') || wrap.classList.contains('pw-wrap'));
+    if (!alreadyWrapped) {
+      wrap = document.createElement('div');
+      wrap.className = 'pw-wrap';
+      input.parentNode.insertBefore(wrap, input);
+      wrap.appendChild(input);
+    }
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'pw-toggle';
+    btn.tabIndex = -1;
+    btn.setAttribute('aria-label', 'Tampilkan/sembunyikan password');
+    btn.innerHTML = icon('eye', 15);
+    wrap.appendChild(btn);
+    // room for the toggle button, plus the left icon's padding if it's also an input-icon-wrap
+    input.style.paddingRight = '38px';
+
+    btn.addEventListener('click', () => {
+      const willShow = input.type === 'password';
+      input.type = willShow ? 'text' : 'password';
+      btn.innerHTML = icon(willShow ? 'eye-off' : 'eye', 15);
+      initLucide();
+    });
+    initLucide();
+  }
+  /** Wire every type="password" input inside `root` (defaults to the whole document). */
+  function wireAllPasswordToggles(root = document) {
+    root.querySelectorAll('input[type="password"]').forEach(wirePasswordToggle);
+  }
+
   // ---------------- Ripple effect ----------------
   function initRipple() {
     document.querySelectorAll('.btn').forEach(btn => {
@@ -294,6 +332,7 @@ const UI = (() => {
     backdrop.onclick = close;
     initLucide();
     initRipple();
+    wireAllPasswordToggles(modal);
     return modal;
   }
   function closeModal() {
@@ -526,5 +565,6 @@ const UI = (() => {
     toast, openModal, closeModal, confirmDialog, openMenu, openCommandPalette,
     bindGlobalCommandPaletteShortcut, showSessionWarning, fireConfetti,
     skeletonCards, skeletonLines, emptyState, errorState, playSound,
+    wirePasswordToggle, wireAllPasswordToggles,
   };
 })();

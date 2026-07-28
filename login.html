@@ -42,10 +42,9 @@
         </div>
         <div class="field">
           <label for="password">Password</label>
-          <div class="input-icon-wrap" style="position:relative">
+          <div class="input-icon-wrap">
             <i data-lucide="lock"></i>
-            <input class="input" type="password" id="password" placeholder="Masukkan password" autocomplete="current-password" required style="padding-right:38px">
-            <button type="button" class="pw-toggle" id="pw-toggle"><i data-lucide="eye"></i></button>
+            <input class="input" type="password" id="password" placeholder="Masukkan password" autocomplete="current-password" required>
           </div>
           <div class="error-msg" id="err-password">Password wajib diisi.</div>
         </div>
@@ -99,13 +98,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     selectedRole = btn.dataset.role;
   });
 
-  document.getElementById('pw-toggle').addEventListener('click', () => {
-    const pw = document.getElementById('password');
-    const isPw = pw.type === 'password';
-    pw.type = isPw ? 'text' : 'password';
-    document.getElementById('pw-toggle').innerHTML = `<i data-lucide="${isPw ? 'eye-off' : 'eye'}"></i>`;
-    lucide.createIcons();
-  });
+  UI.wireAllPasswordToggles(document);
 
   document.getElementById('btn-forgot-password').addEventListener('click', () => {
     UI.openModal({ title: 'Lupa Password', size: 'modal-sm', bodyHtml: `

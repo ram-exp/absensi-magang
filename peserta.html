@@ -194,18 +194,44 @@ document.addEventListener('DOMContentLoaded', async function () {
       ${p ? `
         <div class="grid grid-2" style="gap:0 16px">
           <div class="field"><label>Username</label><input class="input" id="pm-username" value="${linkedUser ? Helpers.sanitize(linkedUser.username) : ''}" ${linkedUser ? '' : 'placeholder="Belum ada akun — isi untuk membuat akun login"'}></div>
-          <div class="field"><label>Password Baru <span class="text-muted" style="font-weight:400">(kosongkan jika tidak diubah)</span></label><input class="input" type="text" id="pm-password" placeholder="••••••"></div>
+          <div class="field">
+            <div class="flex-between" style="align-items:center;margin-bottom:6px">
+              <label style="margin-bottom:0">Password Baru <span class="text-muted" style="font-weight:400">(kosongkan jika tidak diubah)</span></label>
+              <span class="flex gap-8"><button type="button" class="text-link-btn" id="pm-gen-pw">Buat Otomatis</button><button type="button" class="text-link-btn" id="pm-copy-pw">Salin</button></span>
+            </div>
+            <input class="input" type="password" id="pm-password" placeholder="••••••">
+          </div>
         </div>
         <p class="text-muted" style="font-size:11px;margin-top:-8px">${linkedUser ? `Akun login aktif untuk peserta ini (dibuat otomatis saat peserta ditambahkan).` : `Peserta ini belum memiliki akun login. Isi username &amp; password untuk membuatkan satu.`}</p>
       ` : `
         <div class="grid grid-2" style="gap:0 16px">
           <div class="field"><label>Username <span class="req">*</span></label><input class="input" id="pm-username" placeholder="cth. ahmad.fauzan"></div>
-          <div class="field"><label>Password <span class="req">*</span></label><input class="input" type="text" id="pm-password" placeholder="Minimal 4 karakter"></div>
+          <div class="field">
+            <div class="flex-between" style="align-items:center;margin-bottom:6px">
+              <label style="margin-bottom:0">Password <span class="req">*</span></label>
+              <span class="flex gap-8"><button type="button" class="text-link-btn" id="pm-gen-pw">Buat Otomatis</button><button type="button" class="text-link-btn" id="pm-copy-pw">Salin</button></span>
+            </div>
+            <input class="input" type="password" id="pm-password" value="${Helpers.sanitize(Helpers.generatePassword())}" placeholder="Minimal 4 karakter">
+          </div>
         </div>
-        <p class="text-muted" style="font-size:11px;margin-top:-8px">Username &amp; password ini akan digunakan peserta untuk login (role Peserta).</p>
+        <p class="text-muted" style="font-size:11px;margin-top:-8px">Username &amp; password ini akan digunakan peserta untuk login (role Peserta). Password dibuat otomatis — klik ikon mata untuk melihat &amp; salin.</p>
       `}
       <div class="error-msg show hidden" id="form-error" style="margin-top:10px"></div>
     `, footHtml: `<button class="btn btn-secondary" onclick="UI.closeModal()">Batal</button><button class="btn btn-primary" id="pm-save">Simpan</button>` });
+
+    document.getElementById('pm-gen-pw').addEventListener('click', () => {
+      const input = document.getElementById('pm-password');
+      input.value = Helpers.generatePassword();
+      input.type = 'text';
+      const t = input.parentElement.querySelector('.pw-toggle'); if (t) t.innerHTML = UI.icon('eye-off', 15);
+      UI.initLucide();
+    });
+    document.getElementById('pm-copy-pw').addEventListener('click', async () => {
+      const val = document.getElementById('pm-password').value;
+      if (!val) { UI.toast('warning', 'Belum ada password', 'Klik "Buat Otomatis" dulu atau isi manual.'); return; }
+      try { await navigator.clipboard.writeText(val); UI.toast('success', 'Disalin', 'Password disalin ke clipboard.'); }
+      catch (e) { UI.toast('error', 'Gagal menyalin', 'Salin manual dari kolom password.'); }
+    });
 
     document.getElementById('pm-save').addEventListener('click', () => {
       const supervisorSel = document.getElementById('pm-supervisor');

@@ -141,6 +141,7 @@ document.addEventListener('DOMContentLoaded', async function () {
   UI.renderShell('settings', user);
   UI.bindGlobalCommandPaletteShortcut(user);
   Auth.initSessionWatcher();
+  UI.wireAllPasswordToggles(document);
 
   if (user.role === 'peserta') document.getElementById('work-hours-card').classList.add('hidden');
 
@@ -220,13 +221,34 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
     function openSupervisorModal(id) {
       const s = id ? AdminData.allSupervisors().find(x=>x.id===id) : null;
+      const autoPw = s ? '' : Helpers.generatePassword(); // auto-generate right away for a brand-new account
       UI.openModal({ title: s ? 'Ubah Pembimbing' : 'Tambah Pembimbing', bodyHtml: `
         <div class="field"><label>Nama Lengkap <span class="req">*</span></label><input class="input" id="sv-name" value="${s?Helpers.sanitize(s.name):''}"></div>
         <div class="field"><label>Jabatan</label><input class="input" id="sv-title" value="${s?Helpers.sanitize(s.title||''):'Pembimbing Lapangan'}"></div>
         <div class="field"><label>Username <span class="req">*</span></label><input class="input" id="sv-username" value="${s?Helpers.sanitize(s.username):''}"></div>
-        <div class="field"><label>${s?'Password Baru (kosongkan jika tidak diubah)':'Password'} ${s?'':'<span class=\"req\">*</span>'}</label><input class="input" type="text" id="sv-password" placeholder="${s?'••••••':'Minimal 4 karakter'}"></div>
+        <div class="field">
+          <div class="flex-between" style="align-items:center;margin-bottom:6px">
+            <label style="margin-bottom:0">${s?'Password Baru (kosongkan jika tidak diubah)':'Password'} ${s?'':'<span class=\"req\">*</span>'}</label>
+            <span class="flex gap-8"><button type="button" class="text-link-btn" id="sv-gen-pw">Buat Otomatis</button><button type="button" class="text-link-btn" id="sv-copy-pw">Salin</button></span>
+          </div>
+          <input class="input" type="password" id="sv-password" value="${Helpers.sanitize(autoPw)}" placeholder="${s?'••••••':'Minimal 4 karakter'}">
+          ${s ? '' : '<p class="text-muted" style="font-size:11px;margin-top:6px">Password dibuat otomatis — klik ikon mata untuk melihatnya, lalu salin untuk diberikan ke pembimbing.</p>'}
+        </div>
         <div class="error-msg show hidden" id="sv-error"></div>
       `, footHtml: `<button class="btn btn-secondary" onclick="UI.closeModal()">Batal</button><button class="btn btn-primary" id="sv-save">Simpan</button>` });
+      document.getElementById('sv-gen-pw').addEventListener('click', () => {
+        const input = document.getElementById('sv-password');
+        input.value = Helpers.generatePassword();
+        input.type = 'text';
+        const t = input.parentElement.querySelector('.pw-toggle'); if (t) t.innerHTML = UI.icon('eye-off', 15);
+        UI.initLucide();
+      });
+      document.getElementById('sv-copy-pw').addEventListener('click', async () => {
+        const val = document.getElementById('sv-password').value;
+        if (!val) { UI.toast('warning', 'Belum ada password', 'Klik "Buat Otomatis" dulu atau isi manual.'); return; }
+        try { await navigator.clipboard.writeText(val); UI.toast('success', 'Disalin', 'Password disalin ke clipboard.'); }
+        catch (e) { UI.toast('error', 'Gagal menyalin', 'Salin manual dari kolom password.'); }
+      });
       document.getElementById('sv-save').addEventListener('click', () => {
         const err = document.getElementById('sv-error'); const showErr = (m) => { err.textContent = m; err.classList.remove('hidden'); };
         const name = document.getElementById('sv-name').value.trim();
@@ -257,9 +279,28 @@ document.addEventListener('DOMContentLoaded', async function () {
       el.querySelectorAll('.btn-dismiss-req').forEach(b => b.addEventListener('click', () => { Auth.dismissPasswordRequest(b.dataset.id); renderResetRequests(); }));
       el.querySelectorAll('.btn-resolve-req').forEach(b => b.addEventListener('click', () => {
         UI.openModal({ title:'Set Password Baru', size:'modal-sm', bodyHtml:`
-          <div class="field"><label>Password Baru</label><input class="input" type="text" id="rq-password" placeholder="Minimal 4 karakter"></div>
+          <div class="field">
+            <div class="flex-between" style="align-items:center;margin-bottom:6px">
+              <label style="margin-bottom:0">Password Baru</label>
+              <span class="flex gap-8"><button type="button" class="text-link-btn" id="rq-gen-pw">Buat Otomatis</button><button type="button" class="text-link-btn" id="rq-copy-pw">Salin</button></span>
+            </div>
+            <input class="input" type="password" id="rq-password" value="${Helpers.sanitize(Helpers.generatePassword())}" placeholder="Minimal 4 karakter">
+            <p class="text-muted" style="font-size:11px;margin-top:6px">Password dibuat otomatis — salin dan berikan ke pengguna yang meminta reset.</p>
+          </div>
           <div class="error-msg show hidden" id="rq-error"></div>
         `, footHtml:`<button class="btn btn-secondary" onclick="UI.closeModal()">Batal</button><button class="btn btn-primary" id="rq-save">Simpan</button>` });
+        document.getElementById('rq-gen-pw').addEventListener('click', () => {
+          const input = document.getElementById('rq-password');
+          input.value = Helpers.generatePassword();
+          input.type = 'text';
+          const t = input.parentElement.querySelector('.pw-toggle'); if (t) t.innerHTML = UI.icon('eye-off', 15);
+          UI.initLucide();
+        });
+        document.getElementById('rq-copy-pw').addEventListener('click', async () => {
+          const val = document.getElementById('rq-password').value;
+          try { await navigator.clipboard.writeText(val); UI.toast('success', 'Disalin', 'Password disalin ke clipboard.'); }
+          catch (e) { UI.toast('error', 'Gagal menyalin', 'Salin manual dari kolom password.'); }
+        });
         document.getElementById('rq-save').addEventListener('click', () => {
           const res = Auth.resolvePasswordReset(b.dataset.id, document.getElementById('rq-password').value);
           if (!res.ok) { const e = document.getElementById('rq-error'); e.textContent = res.message; e.classList.remove('hidden'); return; }
