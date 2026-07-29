@@ -97,7 +97,7 @@
         <button class="btn btn-primary" id="btn-save-work"><i data-lucide="save"></i> Simpan Pengaturan</button>
       </div>
 
-      <div class="card card-pad mb-24">
+      <div class="card card-pad mb-24" id="backup-restore-card">
         <div class="card-head"><h3><i data-lucide="database-backup"></i> Backup &amp; Restore Data</h3></div>
         <p class="text-secondary mb-16" style="font-size:.8125rem">Seluruh data tersimpan di penyimpanan lokal browser Anda (LocalStorage). Ekspor secara berkala untuk mencegah kehilangan data.</p>
         <div class="flex gap-8" style="flex-wrap:wrap">
@@ -107,7 +107,7 @@
         </div>
       </div>
 
-      <div class="card card-pad" style="border-color:var(--status-alpha)">
+      <div class="card card-pad" style="border-color:var(--status-alpha)" id="danger-zone-card">
         <div class="card-head"><h3 style="color:var(--status-alpha)"><i data-lucide="alert-triangle"></i> Zona Berbahaya</h3></div>
         <p class="text-secondary mb-16" style="font-size:.8125rem">Mengembalikan aplikasi ke kondisi awal akan menghapus seluruh data peserta, absensi, dan pengaturan secara permanen.</p>
         <button class="btn btn-danger" id="btn-reset"><i data-lucide="trash-2"></i> Reset Aplikasi</button>
@@ -144,6 +144,10 @@ document.addEventListener('DOMContentLoaded', async function () {
   UI.wireAllPasswordToggles(document);
 
   if (user.role === 'peserta') document.getElementById('work-hours-card').classList.add('hidden');
+  if (user.role !== 'admin') {
+    document.getElementById('backup-restore-card').classList.add('hidden');
+    document.getElementById('danger-zone-card').classList.add('hidden');
+  }
 
   // ---------------- Ubah Password (semua role) ----------------
   document.getElementById('btn-save-password').addEventListener('click', () => {

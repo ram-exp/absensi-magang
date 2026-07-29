@@ -84,8 +84,11 @@
 
 <!-- Scanner modal content template -->
 <template id="tpl-scanner">
-  <video id="scan-video" class="capture-video" autoplay playsinline muted></video>
-  <canvas id="scan-canvas" class="hidden"></canvas>
+  <div class="capture-box" style="position:relative">
+    <video id="scan-video" class="capture-video" autoplay playsinline muted></video>
+    <canvas id="scan-canvas" class="hidden"></canvas>
+    <button type="button" class="icon-btn" id="btn-flip-camera" title="Putar kamera" style="position:absolute;top:10px;right:10px;background:rgba(18,20,28,.55);color:#fff;border-color:transparent"><i data-lucide="refresh-ccw"></i></button>
+  </div>
   <p class="text-muted mt-8" style="font-size:.8125rem;text-align:center" id="scan-status">Arahkan kamera ke kode QR peserta…</p>
 </template>
 
@@ -192,10 +195,28 @@ document.addEventListener('DOMContentLoaded', async function () {
   }
 
   async function doCheckOut() {
-    const location = await Attendance.getLocation();
-    const result = Attendance.checkOut(myParticipant.id, { location });
-    if (result.ok) { UI.toast('success', 'Check-Out Berhasil', `Tercatat pukul ${result.record.checkOut}`); renderCheckInOut(); renderTable(); }
-    else UI.toast('error', 'Check-Out Gagal', result.message);
+    UI.openModal({ title:'Check-Out', size:'modal-sm', bodyHtml: `
+      <div class="capture-box">
+        <video id="co-video" class="capture-video" autoplay playsinline muted></video>
+        <canvas id="co-canvas" class="hidden"></canvas>
+        <p class="text-muted mt-8" style="font-size:.8125rem" id="co-status">Menyiapkan kamera…</p>
+      </div>`,
+      footHtml: `<button class="btn btn-secondary" onclick="UI.closeModal()">Batal</button><button class="btn btn-primary" id="co-capture" disabled><i data-lucide="camera"></i> Ambil Selfie &amp; Absen Pulang</button>` });
+    UI.initLucide();
+    const video = document.getElementById('co-video');
+    const ok = await Attendance.startCamera(video);
+    document.getElementById('co-status').textContent = ok ? 'Kamera siap. Posisikan wajah Anda.' : 'Kamera tidak tersedia — absensi tetap bisa dilanjutkan tanpa selfie.';
+    document.getElementById('co-capture').disabled = false;
+    document.getElementById('co-capture').addEventListener('click', async () => {
+      let selfie = null;
+      if (ok) selfie = Attendance.captureFrame(video, document.getElementById('co-canvas'));
+      Attendance.stopCamera();
+      const location = await Attendance.getLocation();
+      const result = Attendance.checkOut(myParticipant.id, { location, selfie });
+      UI.closeModal();
+      if (result.ok) { UI.toast('success', 'Check-Out Berhasil', `Tercatat pukul ${result.record.checkOut}`); renderCheckInOut(); renderTable(); }
+      else UI.toast('error', 'Check-Out Gagal', result.message);
+    });
   }
 
   function openLeaveModal() {
@@ -224,8 +245,15 @@ document.addEventListener('DOMContentLoaded', async function () {
     UI.initLucide();
     const video = document.getElementById('scan-video');
     const canvas = document.getElementById('scan-canvas');
-    const ok = await Attendance.startCamera(video);
+    const ok = await Attendance.startCamera(video, 'environment');
     if (!ok) { document.getElementById('scan-status').textContent = 'Kamera tidak tersedia.'; return; }
+    document.getElementById('btn-flip-camera').addEventListener('click', async () => {
+      document.getElementById('scan-status').textContent = 'Mengganti kamera…';
+      const result = await Attendance.switchCamera(video);
+      document.getElementById('scan-status').textContent = result
+        ? 'Arahkan kamera ke kode QR peserta…'
+        : 'Gagal mengganti kamera — perangkat mungkin hanya punya satu kamera.';
+    });
     let scanning = true;
     function loop() {
       if (!scanning) return;
@@ -302,17 +330,59 @@ document.addEventListener('DOMContentLoaded', async function () {
   function showDetail(id) {
     const r = Storage.find(Storage.KEYS.attendance, id);
     const p = Participants.getById(r.participantId);
+    const isAdmin = user.role === 'admin';
     UI.openModal({ title: 'Detail Absensi', bodyHtml: `
-      ${r.selfie ? `<img src="${r.selfie}" style="width:100%;border-radius:12px;margin-bottom:14px">` : ''}
+      ${(r.selfie || r.checkOutSelfie) ? `
+        <div class="grid grid-2" style="gap:10px;margin-bottom:14px">
+          ${r.selfie ? `<div><img src="${r.selfie}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:12px"><p class="text-muted" style="font-size:11px;text-align:center;margin-top:4px">Foto Check-In</p></div>` : ''}
+          ${r.checkOutSelfie ? `<div><img src="${r.checkOutSelfie}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:12px"><p class="text-muted" style="font-size:11px;text-align:center;margin-top:4px">Foto Check-Out</p></div>` : ''}
+        </div>` : ''}
       <div class="field"><label>Peserta</label><div>${Helpers.sanitize(p?.name || '-')}</div></div>
       <div class="field"><label>Tanggal</label><div>${Helpers.formatDateLong(r.date)}</div></div>
       <div class="field"><label>Status</label><span class="pill pill-${r.status}">${Helpers.statusLabel(r.status)}</span></div>
       <div class="field"><label>Check-In / Out</label><div class="text-mono">${r.checkIn || '-'} — ${r.checkOut || '-'}</div></div>
       ${r.location ? `<div class="field"><label>Lokasi</label><div style="font-size:.8125rem">${Helpers.sanitize(r.location.address)}</div></div>` : ''}
       ${r.note ? `<div class="field"><label>Catatan</label><div>${Helpers.sanitize(r.note)}</div></div>` : ''}
-    `, footHtml: isStaff ? `<button class="btn btn-danger" id="del-att">Hapus</button><button class="btn btn-secondary" onclick="UI.closeModal()">Tutup</button>` : `<button class="btn btn-secondary" onclick="UI.closeModal()">Tutup</button>` });
+      ${r.supportingPhoto ? `<div class="field"><label>Foto Pendukung (Admin)</label><img src="${r.supportingPhoto}" style="width:100%;border-radius:12px;margin-top:4px"></div>` : ''}
+    `, footHtml: `
+      ${isAdmin ? `<button class="btn btn-secondary" id="edit-att"><i data-lucide="pencil"></i> Edit</button>` : ''}
+      ${isStaff ? `<button class="btn btn-danger" id="del-att">Hapus</button>` : ''}
+      <button class="btn btn-secondary" onclick="UI.closeModal()">Tutup</button>` });
+    UI.initLucide();
     if (isStaff) document.getElementById('del-att').addEventListener('click', () => {
       UI.confirmDialog({ title:'Hapus data absensi?', message:'Tindakan ini tidak dapat dibatalkan.', danger:true, confirmText:'Hapus', onConfirm:() => { Attendance.remove(id); UI.closeModal(); renderTable(); UI.toast('success','Terhapus','Data absensi berhasil dihapus.'); } });
+    });
+    if (isAdmin) document.getElementById('edit-att').addEventListener('click', () => openEditAttendanceModal(r));
+  }
+
+  /** Admin-only: edit check-in/check-out time and attach an optional supporting photo. */
+  function openEditAttendanceModal(r) {
+    UI.openModal({ title: 'Edit Absensi', bodyHtml: `
+      <div class="grid grid-2">
+        <div class="field"><label>Check-In</label><input class="input" type="time" id="e-checkin" value="${r.checkIn || ''}"></div>
+        <div class="field"><label>Check-Out</label><input class="input" type="time" id="e-checkout" value="${r.checkOut || ''}"></div>
+      </div>
+      <div class="field">
+        <label>Foto Pendukung <span class="text-muted" style="font-weight:400">(opsional)</span></label>
+        <input class="input" type="file" accept="image/*" id="e-photo">
+        <div id="e-photo-preview" style="margin-top:8px">${r.supportingPhoto ? `<img src="${r.supportingPhoto}" style="max-width:160px;border-radius:10px">` : ''}</div>
+      </div>
+      <p class="text-muted" style="font-size:11px">Perubahan jam ini hanya bisa dilakukan oleh admin, untuk keperluan koreksi data.</p>
+      <div class="error-msg show hidden" id="e-error"></div>
+    `, footHtml: `<button class="btn btn-secondary" onclick="UI.closeModal()">Batal</button><button class="btn btn-primary" id="e-save">Simpan</button>` });
+    let newPhoto = r.supportingPhoto || null;
+    document.getElementById('e-photo').addEventListener('change', async (ev) => {
+      const file = ev.target.files[0];
+      if (!file) return;
+      newPhoto = await Helpers.fileToBase64(file);
+      document.getElementById('e-photo-preview').innerHTML = `<img src="${newPhoto}" style="max-width:160px;border-radius:10px">`;
+    });
+    document.getElementById('e-save').addEventListener('click', () => {
+      const checkIn = document.getElementById('e-checkin').value || null;
+      const checkOut = document.getElementById('e-checkout').value || null;
+      Attendance.update(r.id, { checkIn, checkOut, supportingPhoto: newPhoto });
+      UI.closeModal(); renderTable();
+      UI.toast('success', 'Tersimpan', 'Data absensi berhasil diperbarui.');
     });
   }
 

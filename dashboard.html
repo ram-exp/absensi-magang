@@ -250,7 +250,9 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (!sel.dataset.bound) {
           sel.dataset.bound = '1';
           sel.innerHTML = `<option value="">— Pilih Peserta —</option>` + all.map(p => `<option value="${p.id}">${Helpers.sanitize(p.name)}</option>`).join('');
-          if (all.length === 1) { selectedCalendarPid = all[0].id; sel.value = all[0].id; }
+          // Intentionally NO auto-select here, even if there's only one participant —
+          // the calendar must always wait for an explicit choice from the dropdown
+          // before it renders any attendance data.
           sel.addEventListener('change', () => { selectedCalendarPid = sel.value || null; fillWidgets(); });
         }
         sel.value = selectedCalendarPid || '';

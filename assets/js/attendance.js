@@ -58,12 +58,13 @@ const Attendance = (() => {
     return { ok: true, record: rec };
   }
 
-  function checkOut(participantId, { location = null } = {}) {
+  function checkOut(participantId, { location = null, selfie = null } = {}) {
     const validation = validateCheckOut(participantId);
     if (!validation.ok) return validation;
     const rec = todayRecord(participantId);
     rec.checkOut = Helpers.nowTime().slice(0, 5);
     rec.checkOutLocation = location;
+    rec.checkOutSelfie = selfie;
     Storage.upsert(Storage.KEYS.attendance, rec);
     return { ok: true, record: rec };
   }
@@ -102,15 +103,24 @@ const Attendance = (() => {
 
   // ---------------- Selfie capture (getUserMedia) ----------------
   let mediaStream = null;
-  async function startCamera(videoEl) {
+  let currentFacingMode = 'user';
+  async function startCamera(videoEl, facingMode = 'user') {
     try {
-      mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+      currentFacingMode = facingMode;
+      mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: facingMode } }, audio: false });
       videoEl.srcObject = mediaStream;
       await videoEl.play();
       return true;
     } catch (e) {
       return false;
     }
+  }
+  /** Stop the current stream and restart with the other camera (front <-> back). Returns the new facingMode used, or null on failure. */
+  async function switchCamera(videoEl) {
+    const next = currentFacingMode === 'user' ? 'environment' : 'user';
+    stopCamera();
+    const ok = await startCamera(videoEl, next);
+    return ok ? next : null;
   }
   function stopCamera() {
     if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
@@ -197,7 +207,7 @@ const Attendance = (() => {
   return {
     all, todayRecord, forParticipant, deriveStatus, validateCheckIn, validateCheckOut,
     checkIn, checkOut, submitLeave, update, remove,
-    getLocation, startCamera, stopCamera, captureFrame,
+    getLocation, startCamera, switchCamera, stopCamera, captureFrame,
     heatmapData, mostCommonCheckInHour, mostDisciplinedDay, currentStreak, isPerfectAttendance,
     renderQR, decodeQRFromCanvas,
   };
