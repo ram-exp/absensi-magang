@@ -157,6 +157,33 @@ h1,h2,h3,h4{font-weight:700;letter-spacing:-.02em;line-height:1.2}
 .auth-card h2{font-size:var(--fs-2xl);margin-bottom:6px}
 .auth-card .subtitle{color:var(--text-secondary);margin-bottom:28px;font-size:var(--fs-sm)}
 
+/* ---- Mobile compact hero (replaces .auth-visual on small screens) ---- */
+.auth-mobile-hero{display:none}
+@media (max-width:900px){
+  .auth-mobile-hero{
+    position:relative;overflow:hidden;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:10px;text-align:center;padding:40px 24px 56px;
+    background:radial-gradient(circle at 25% 15%,#4F46E5 0%,#312E81 55%,#0B0D14 100%);
+    border-radius:0 0 32px 32px;
+  }
+  .auth-mobile-hero::before,.auth-mobile-hero::after{
+    content:'';position:absolute;border-radius:50%;filter:blur(50px);opacity:.5;
+  }
+  .auth-mobile-hero::before{width:180px;height:180px;background:#8B5CF6;top:-60px;right:-40px;animation:float1 9s var(--ease) infinite}
+  .auth-mobile-hero::after{width:150px;height:150px;background:#22D3EE;bottom:-50px;left:-40px;animation:float2 11s var(--ease) infinite}
+  .auth-mobile-hero .auth-brand{position:relative;z-index:1;font-size:var(--fs-md)}
+  .auth-mobile-hero p{position:relative;z-index:1;color:rgba(255,255,255,.82);font-size:var(--fs-sm);max-width:280px;line-height:1.5}
+
+  /* Pull the form up so it reads as a rounded "sheet" sitting over the hero,
+     instead of floating with a big empty gap above it like on plain gray. */
+  .auth-panel{align-items:flex-start;justify-content:flex-start;padding:0 18px 32px}
+  .auth-card{
+    max-width:none;margin-top:-32px;position:relative;z-index:2;
+    background:var(--surface);border-radius:22px;padding:26px 20px 24px;
+    box-shadow:0 -8px 28px rgba(15,20,30,.12),0 4px 16px rgba(15,20,30,.06);
+  }
+}
+
 .role-switch{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:22px;background:var(--surface-alt);padding:4px;border-radius:var(--r-md);border:1px solid var(--border)}
 .role-switch button{
   padding:9px 6px;border:none;background:transparent;border-radius:var(--r-sm);
