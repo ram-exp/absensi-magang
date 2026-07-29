@@ -524,9 +524,9 @@ const UI = (() => {
     if (!chip) return;
     if (!settings.weatherWidget) { chip.classList.add('hidden'); return; }
     chip.classList.remove('hidden');
-    const conditions = [['sun', '30°C Cerah'], ['cloud', '27°C Berawan'], ['cloud-rain', '25°C Hujan Ringan']];
+    const conditions = [['sun', '30°C', 'Cerah'], ['cloud', '27°C', 'Berawan'], ['cloud-rain', '25°C', 'Hujan Ringan']];
     const pick = conditions[new Date().getDate() % conditions.length];
-    chip.innerHTML = `${icon(pick[0], 14)}<span>${pick[1]}</span>`;
+    chip.innerHTML = `${icon(pick[0], 14)}<span class="w-temp">${pick[1]}</span><span class="w-cond">${pick[2]}</span>`;
   }
 
   // ---------------- Confetti (perfect attendance celebration) ----------------

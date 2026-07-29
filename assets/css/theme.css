@@ -15,7 +15,15 @@
 #confetti-canvas{position:fixed;inset:0;pointer-events:none;z-index:300}
 
 /* Weather chip */
-.weather-chip{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:var(--r-md);background:linear-gradient(135deg,#0EA5E9,#6366F1);color:#fff;font-size:var(--fs-xs);font-weight:600}
+.weather-chip{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:var(--r-md);background:linear-gradient(135deg,#0EA5E9,#6366F1);color:#fff;font-size:var(--fs-xs);font-weight:600;flex-shrink:0;white-space:nowrap}
+.weather-chip svg{flex-shrink:0}
+@media (max-width:480px){
+  /* Not enough room for "25°C Hujan Ringan" next to the icon buttons — drop the
+     condition label and keep just the temperature so the chip stays one tidy
+     pill instead of wrapping or squeezing the rest of the top bar. */
+  .weather-chip{padding:8px 10px}
+  .weather-chip .w-cond{display:none}
+}
 
 /* Countdown */
 .countdown-grid{display:flex;gap:10px}

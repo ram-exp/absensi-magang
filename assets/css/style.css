@@ -447,6 +447,10 @@ tbody tr:hover{background:var(--surface-alt)}
 
 /* --- Calendar grid --- */
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+/* When an empty/error state is rendered inside the 7-col calendar grid (e.g. "pilih
+   peserta dulu"), it's still just ONE grid item — without this it gets squeezed into
+   a single 1/7-width column and every word wraps onto its own line. */
+.cal-grid .state-block{grid-column:1 / -1}
 .cal-dow{text-align:center;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;padding-bottom:6px}
 .cal-cell{aspect-ratio:1;border-radius:var(--r-sm);border:1px solid var(--border);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:var(--fs-xs);font-weight:600;position:relative;cursor:default;background:var(--surface-alt)}
 .cal-cell.empty{background:transparent;border-color:transparent}
@@ -480,7 +484,12 @@ tbody tr:hover{background:var(--surface-alt)}
 .grid-3{grid-template-columns:repeat(3,1fr)}
 .grid-4{grid-template-columns:repeat(4,1fr)}
 @media (max-width:1100px){.grid-4{grid-template-columns:repeat(2,1fr)}.grid-3{grid-template-columns:repeat(2,1fr)}}
-@media (max-width:640px){.grid-4,.grid-3,.grid-2{grid-template-columns:1fr}}
+@media (max-width:640px){.grid-4,.grid-3,.grid-2{grid-template-columns:1fr}
+  /* Center the icon/number/label inside stat cards on phone widths — a
+     left-aligned card looks lopsided once it spans the full screen width. */
+  .stat-card{align-items:center;text-align:center}
+  .stat-card .stat-top{justify-content:center}
+}
 .flex{display:flex}
 .flex-between{display:flex;align-items:center;justify-content:space-between}
 .flex-center{display:flex;align-items:center;justify-content:center}
