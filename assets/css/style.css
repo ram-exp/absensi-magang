@@ -498,6 +498,36 @@ tbody tr:hover{background:var(--surface-alt)}
 .fade-in{animation:fadeIn var(--t-slow) var(--ease)}
 @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 
+/* =========================================================================
+   MOBILE APP SHELL — bottom tab bar (native-app feel)
+   ========================================================================= */
+.mobile-tabbar{display:none}
+@media (max-width:900px){
+  .mobile-tabbar{
+    display:flex;position:fixed;left:0;right:0;bottom:0;z-index:70;
+    background:var(--surface-glass);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+    border-top:1px solid var(--border);box-shadow:0 -6px 24px rgba(15,20,30,.08);
+    padding:6px 4px calc(6px + env(safe-area-inset-bottom));
+  }
+  .tabbar-item{
+    flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+    padding:6px 2px;border:none;background:none;color:var(--text-muted);
+    font-size:10.5px;font-weight:600;border-radius:12px;transition:color var(--t-fast),transform var(--t-fast);
+  }
+  .tabbar-item:active{transform:scale(.92)}
+  .tabbar-item svg{width:21px;height:21px;transition:filter var(--t-fast)}
+  .tabbar-item.active{color:var(--brand-indigo)}
+  .tabbar-item.active svg{filter:drop-shadow(0 3px 6px rgba(99,102,241,.4))}
+  /* The hamburger duplicates the new "Lainnya" tab, so hide it once the tab
+     bar takes over primary navigation on small screens — keeps the header
+     clean like a real app's top bar instead of a desktop-site header. */
+  #btn-mobile-nav{display:none !important}
+  /* Leave room so page content never sits underneath the fixed tab bar. */
+  .main-content{padding-bottom:calc(80px + env(safe-area-inset-bottom))}
+  /* Modals/toasts should also stay clear of the tab bar. */
+  .toast-stack{bottom:calc(76px + env(safe-area-inset-bottom))}
+}
+
 /* Print */
 @media print{
   .sidebar,.topbar,.no-print{display:none !important}

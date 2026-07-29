@@ -109,6 +109,32 @@ const UI = (() => {
       document.body.appendChild(bd);
     }
 
+    // ---- Bottom tab bar (mobile only, native-app style) ----
+    // Show up to 3 nav items as real tabs; anything left over (plus Akun items
+    // like Profil/Pengaturan) collapses into a "Lainnya" tab that reuses the
+    // same sidebar drawer already built above — no separate menu to maintain.
+    let tabbar = document.getElementById('mobile-tabbar');
+    if (!tabbar) {
+      tabbar = document.createElement('nav');
+      tabbar.className = 'mobile-tabbar';
+      tabbar.id = 'mobile-tabbar';
+      document.body.appendChild(tabbar);
+    }
+    const roleItems = NAV.flatMap(g => g.items.filter(i => i.roles.includes(user.role)));
+    const tabItems = roleItems.slice(0, 3);
+    const hasOverflow = roleItems.length > 3;
+    const moreIsActive = hasOverflow && !tabItems.some(i => i.id === activeId);
+    tabbar.innerHTML = `
+      ${tabItems.map(i => `
+        <a class="tabbar-item${i.id === activeId ? ' active' : ''}" href="${i.href}" data-nav="${i.id}">
+          ${icon(i.icon, 21)}<span>${i.label}</span>
+        </a>`).join('')}
+      ${hasOverflow ? `
+        <button type="button" class="tabbar-item${moreIsActive ? ' active' : ''}" id="btn-tabbar-more">
+          ${icon('menu', 21)}<span>Lainnya</span>
+        </button>` : ''}
+    `;
+
     wireShellEvents(user);
     initWeatherWidget();
     checkReminder(user);
@@ -146,6 +172,11 @@ const UI = (() => {
     backdrop.addEventListener('click', () => {
       sidebar.classList.remove('mobile-open');
       backdrop.classList.remove('show');
+    });
+
+    document.getElementById('btn-tabbar-more')?.addEventListener('click', () => {
+      sidebar.classList.toggle('mobile-open');
+      backdrop.classList.toggle('show');
     });
 
     document.getElementById('btn-theme-toggle').addEventListener('click', (e) => {
