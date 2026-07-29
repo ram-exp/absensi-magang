@@ -357,11 +357,14 @@ document.addEventListener('DOMContentLoaded', async function () {
 
   /** Admin-only: edit check-in/check-out time and attach an optional supporting photo. */
   function openEditAttendanceModal(r) {
+    const timeBased = ['hadir', 'terlambat'].includes(r.status);
     UI.openModal({ title: 'Edit Absensi', bodyHtml: `
       <div class="grid grid-2">
         <div class="field"><label>Check-In</label><input class="input" type="time" id="e-checkin" value="${r.checkIn || ''}"></div>
         <div class="field"><label>Check-Out</label><input class="input" type="time" id="e-checkout" value="${r.checkOut || ''}"></div>
       </div>
+      ${timeBased ? `<div class="field"><label>Status (dihitung otomatis dari jam check-in)</label><div id="e-status-preview"></div></div>`
+        : `<p class="text-muted" style="font-size:11px">Status saat ini <b>${Helpers.statusLabel(r.status)}</b> tidak dihitung dari jam (bukan Hadir/Terlambat), jadi tidak berubah otomatis di sini.</p>`}
       <div class="field">
         <label>Foto Pendukung <span class="text-muted" style="font-weight:400">(opsional)</span></label>
         <input class="input" type="file" accept="image/*" id="e-photo">
@@ -371,6 +374,17 @@ document.addEventListener('DOMContentLoaded', async function () {
       <div class="error-msg show hidden" id="e-error"></div>
     `, footHtml: `<button class="btn btn-secondary" onclick="UI.closeModal()">Batal</button><button class="btn btn-primary" id="e-save">Simpan</button>` });
     let newPhoto = r.supportingPhoto || null;
+
+    function renderStatusPreview() {
+      if (!timeBased) return;
+      const ci = document.getElementById('e-checkin').value;
+      const preview = document.getElementById('e-status-preview');
+      const s = ci ? Attendance.deriveStatus(ci) : r.status;
+      preview.innerHTML = `<span class="pill pill-${s}">${Helpers.statusLabel(s)}</span>`;
+    }
+    renderStatusPreview();
+    if (timeBased) document.getElementById('e-checkin').addEventListener('input', renderStatusPreview);
+
     document.getElementById('e-photo').addEventListener('change', async (ev) => {
       const file = ev.target.files[0];
       if (!file) return;
@@ -380,7 +394,11 @@ document.addEventListener('DOMContentLoaded', async function () {
     document.getElementById('e-save').addEventListener('click', () => {
       const checkIn = document.getElementById('e-checkin').value || null;
       const checkOut = document.getElementById('e-checkout').value || null;
-      Attendance.update(r.id, { checkIn, checkOut, supportingPhoto: newPhoto });
+      const updates = { checkIn, checkOut, supportingPhoto: newPhoto };
+      // Recalculate hadir/terlambat automatically from the (possibly edited) check-in
+      // time — otherwise the old status stays stuck even after the time is corrected.
+      if (timeBased && checkIn) updates.status = Attendance.deriveStatus(checkIn);
+      Attendance.update(r.id, updates);
       UI.closeModal(); renderTable();
       UI.toast('success', 'Tersimpan', 'Data absensi berhasil diperbarui.');
     });
